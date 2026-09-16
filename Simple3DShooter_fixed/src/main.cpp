@@ -71,7 +71,8 @@ enum OtherWorldObjectType {
     OCEAN_OBJECT_ICEBERG = 3,
     WINTER_OBJECT_RADAR = 4,
     WINTER_OBJECT_PINE = 5,
-    WINTER_OBJECT_ICE_CRYSTAL = 6
+    WINTER_OBJECT_ICE_CRYSTAL = 6,
+    WINTER_OBJECT_SNOWMAN = 7
 };
 
 struct OtherWorldObject {
@@ -142,15 +143,28 @@ static void createOtherWorldObjects()
     g_otherWorldObjects.push_back({-95.0f, -155.0f, 1.4f, 0.0f, OCEAN_OBJECT_ICEBERG, WORLD_OCEAN, 10.0f});
     g_otherWorldObjects.push_back({115.0f, 145.0f, 1.1f, 0.0f, OCEAN_OBJECT_ICEBERG, WORLD_OCEAN, 10.0f});
 
+    // Winter wonderland: several giant fir trees plus smaller pines.
     for (int i = 0; i < 14; ++i)
     {
         const float a = i * 0.448799f;
         const float r = 85.0f + 75.0f*(i%3);
+        const bool giant = (i % 4 == 0);
+        const float scale = giant ? (6.5f + 0.45f*(i%3)) : (2.8f + 0.25f*(i%3));
+        const float radius = giant ? 7.0f : 3.0f;
         g_otherWorldObjects.push_back({
-            cosf(a)*r, sinf(a)*r, 0.8f + 0.35f*(i%4),
-            a, WINTER_OBJECT_PINE, WORLD_WINTER, 2.5f
+            cosf(a)*r, sinf(a)*r, scale,
+            a, WINTER_OBJECT_PINE, WORLD_WINTER, radius
         });
     }
+    // Giant snowmen placed in open areas, each with a generous collision radius.
+    const float snowmen[][3] = {
+        {-70.0f, -70.0f, 2.6f}, {75.0f, -65.0f, 2.3f},
+        {-80.0f, 80.0f, 2.8f}, {72.0f, 82.0f, 2.5f},
+        {0.0f, 145.0f, 3.0f}
+    };
+    for (const auto& sm : snowmen)
+        g_otherWorldObjects.push_back({sm[0], sm[1], sm[2], 0.0f, WINTER_OBJECT_SNOWMAN, WORLD_WINTER, 7.5f});
+
     g_otherWorldObjects.push_back({-120.0f, -95.0f, 1.4f, 0.0f, WINTER_OBJECT_RADAR, WORLD_WINTER, 7.0f});
     g_otherWorldObjects.push_back({130.0f, 110.0f, 1.1f, 0.0f, WINTER_OBJECT_RADAR, WORLD_WINTER, 7.0f});
 }
@@ -182,9 +196,46 @@ static void drawOtherWorldObject(const OtherWorldObject& o)
     }
     else if (o.type == WINTER_OBJECT_PINE)
     {
+        // Layered fir with snow caps and a spiral garland. Scale is applied by
+        // the parent transform, allowing truly giant trees without new meshes.
         drawBox(0, 2.5f, 0, 0.8f, 5.0f, 0.8f, 0.25f,0.19f,0.12f);
-        drawBox(0, 5.0f, 0, 4.0f, 4.0f, 4.0f, 0.10f,0.32f,0.16f);
-        drawBox(0, 7.0f, 0, 2.7f, 3.0f, 2.7f, 0.12f,0.38f,0.20f);
+        drawBox(0, 5.0f, 0, 4.8f, 4.2f, 4.8f, 0.06f,0.28f,0.11f);
+        drawBox(0, 7.5f, 0, 3.7f, 3.2f, 3.7f, 0.05f,0.34f,0.14f);
+        drawBox(0, 9.4f, 0, 2.35f, 2.4f, 2.35f, 0.07f,0.40f,0.17f);
+        // Snow sitting on the branch tiers.
+        drawBox(0, 6.95f, 0, 5.0f, 0.28f, 5.0f, 0.92f,0.96f,1.0f);
+        drawBox(0, 8.95f, 0, 3.8f, 0.24f, 3.8f, 0.96f,0.98f,1.0f);
+        drawBox(0, 10.55f, 0, 2.5f, 0.20f, 2.5f, 0.98f,0.99f,1.0f);
+        // Warm festive garland: alternating light bulbs around each tier.
+        for (int k=0;k<12;++k)
+        {
+            const float a=(float)k/12.0f*2.0f*(float)M_PI;
+            const float gx=cosf(a)*2.15f, gz=sinf(a)*2.15f;
+            const float gy=5.75f + 0.42f*sinf(a*1.5f);
+            const bool warm=(k%2)==0;
+            drawBox(gx,gy,gz,0.18f,0.24f,0.18f, warm?0.95f:0.18f, warm?0.28f:0.70f, warm?0.05f:0.95f);
+        }
+        for (int k=0;k<10;++k)
+        {
+            const float a=(float)k/10.0f*2.0f*(float)M_PI + 0.2f;
+            const float gx=cosf(a)*1.55f, gz=sinf(a)*1.55f;
+            const float gy=7.65f + 0.30f*sinf(a*1.4f);
+            drawBox(gx,gy,gz,0.16f,0.20f,0.16f, (k%2)?0.95f:0.18f, (k%2)?0.10f:0.65f, (k%2)?0.05f:0.95f);
+        }
+        drawBox(0, 11.7f, 0, 0.18f, 1.4f, 0.18f, 0.95f,0.85f,0.18f);
+    }
+    else if (o.type == WINTER_OBJECT_SNOWMAN)
+    {
+        drawBox(0, 1.8f, 0, 4.8f, 3.6f, 4.8f, 0.96f,0.98f,1.0f);
+        drawBox(0, 4.35f, 0, 3.7f, 2.0f, 3.7f, 0.98f,0.99f,1.0f);
+        drawBox(0, 6.15f, 0, 2.75f, 1.65f, 2.75f, 0.99f,1.0f,1.0f);
+        // Coal eyes/buttons and carrot nose facing the local +Z direction.
+        drawBox(-0.48f, 6.45f, 1.38f, 0.22f, 0.22f, 0.18f, 0.03f,0.03f,0.04f);
+        drawBox( 0.48f, 6.45f, 1.38f, 0.22f, 0.22f, 0.18f, 0.03f,0.03f,0.04f);
+        drawBox(0, 6.05f, 1.55f, 0.24f, 0.24f, 0.90f, 0.95f,0.38f,0.05f);
+        for(int k=-1;k<=1;++k) drawBox(k*0.48f, 4.0f, 1.72f, 0.20f,0.20f,0.20f,0.04f,0.04f,0.05f);
+        drawBox(0, 7.20f, 0, 3.2f, 0.55f, 3.2f, 0.04f,0.05f,0.07f);
+        drawBox(0, 7.70f, 0, 2.25f, 0.35f, 2.25f, 0.05f,0.06f,0.08f);
     }
     else if (o.type == WINTER_OBJECT_RADAR)
     {
@@ -299,28 +350,28 @@ struct StoryBeat {
 };
 
 static const StoryBeat g_storyBeats[] = {
-    {"OPERATION RIFTFALL: THE FRONTIER GATE HAS FAILED.", "Secure the landing zone and survive the first assault.", WORLD_MAIN},
-    {"COMMAND: SCOUTS REPORT THREE SIGNALS BENEATH THE TERRAIN.", "Eliminate 10 hostiles and locate the underground route.", WORLD_MAIN},
-    {"ARCHIVE: THE TUNNELS WERE BUILT AROUND AN UNKNOWN ENERGY CORE.", "Push through the tunnel network and keep the route open.", WORLD_MAIN},
-    {"WARNING: ARMORED UNITS ARE MOVING TOWARD THE CITY.", "Destroy 5 heavy units before they reach the urban sector.", WORLD_MAIN},
-    {"COMMAND: A RIFT HAS OPENED OVER THE EASTERN FRONTIER.", "Find an active portal to the ocean world.", WORLD_MAIN},
-    {"OCEAN LOG: THE SKY SUBMARINES ARE GUARDING A LOST CONVOY.", "Survive the ocean assault and destroy hostile machines.", WORLD_OCEAN},
-    {"NAVAL ARCHIVE: THE CONVOY CARRIED A SECOND RIFT KEY.", "Recover supplies and intercept enemy rockets.", WORLD_OCEAN},
-    {"SIGNAL: SOMETHING IS BROADCASTING FROM THE POLAR WORLD.", "Return through a safe portal and follow the polar signal.", WORLD_OCEAN},
-    {"WINTER LOG: THE SIGNAL IS AN AUTOMATED DISTRESS BEACON.", "Cross the snowfield and secure the relay station.", WORLD_WINTER},
-    {"DISTRESS BEACON: THE CORE IS NOT A WEAPON. IT IS A LOCK.", "Hold the relay while hostile reinforcements arrive.", WORLD_WINTER},
-    {"COMMAND: THREE WORLD SIGNALS ARE NOW SYNCHRONIZED.", "Return to the frontier and prepare for the final breach.", WORLD_WINTER},
-    {"FINAL PROTOCOL: THE RIFT IS OPENING. ALL HOSTILE FORCES ARE MOBILIZING.", "Survive the final assault and eliminate the remaining hostiles.", WORLD_MAIN},
-    {"FINAL TRANSMISSION: THE CORE CAN CLOSE THE RIFT, BUT ONLY ONCE.", "Reach the central command zone.", WORLD_MAIN},
-    {"COMMAND: CORE LOCK ACQUIRED. COVER THE EXTRACTION TEAM.", "Hold the command zone for the final extraction.", WORLD_MAIN},
-    {"EXTRACTION: THE RIFT IS COLLAPSING. KEEP FIGHTING.", "Complete the operation by reaching the extraction perimeter.", WORLD_MAIN},
-    {"EPILOGUE: FRONTIER STATIONS ARE RECEIVING A CLEAR SIGNAL AGAIN.", "Operation Riftfall complete. Continue the campaign or explore.", WORLD_MAIN}
+    {"ОПЕРАЦИЯ «РАЗЛОМ»: ПОГРАНИЧНЫЕ ВОРОТА ВЫШЛИ ИЗ СТРОЯ.", "Зачистите зону высадки и переживите первую атаку.", WORLD_MAIN},
+    {"КОМАНДОВАНИЕ: РАЗВЕДКА ОБНАРУЖИЛА ТРИ СИГНАЛА ПОД ЗЕМЛЁЙ.", "Уничтожьте 10 противников и найдите путь в подземелье.", WORLD_MAIN},
+    {"АРХИВ: ТУННЕЛИ ПОСТРОЕНЫ ВОКРУГ НЕИЗВЕСТНОГО ЭНЕРГЕТИЧЕСКОГО ЯДРА.", "Пройдите через сеть туннелей и удерживайте маршрут открытым.", WORLD_MAIN},
+    {"ВНИМАНИЕ: БРОНИРОВАННЫЕ ЧАСТИ ДВИЖУТСЯ К ГОРОДУ.", "Уничтожьте 5 тяжёлых машин, прежде чем они достигнут города.", WORLD_MAIN},
+    {"КОМАНДОВАНИЕ: НА ВОСТОЧНОЙ ГРАНИЦЕ ОТКРЫЛСЯ РАЗЛОМ.", "Найдите действующий портал в морской мир.", WORLD_MAIN},
+    {"МОРСКОЙ ЖУРНАЛ: НЕБЕСНЫЕ СУБМАРИНЫ ОХРАНЯЮТ ПРОПАВШИЙ КОНВОЙ.", "Переживите атаку в морском мире и уничтожьте вражеские машины.", WORLD_OCEAN},
+    {"МОРСКОЙ АРХИВ: КОНВОЙ ПЕРЕВОЗИЛ ВТОРОЙ КЛЮЧ РАЗЛОМА.", "Соберите припасы и сбивайте вражеские ракеты.", WORLD_OCEAN},
+    {"СИГНАЛ: ИЗ ПОЛЯРНОГО МИРА ИДЁТ НЕИЗВЕСТНАЯ ПЕРЕДАЧА.", "Вернитесь через безопасный портал и следуйте за полярным сигналом.", WORLD_OCEAN},
+    {"ЗИМНИЙ ЖУРНАЛ: СИГНАЛ ИДЁТ ОТ АВТОМАТИЧЕСКОГО АВАРИЙНОГО МАЯКА.", "Пересеките снежное поле и захватите ретрансляционную станцию.", WORLD_WINTER},
+    {"АВАРИЙНЫЙ МАЯК: ЯДРО — НЕ ОРУЖИЕ. ЭТО ЗАМОК.", "Удерживайте ретранслятор, пока враг получает подкрепление.", WORLD_WINTER},
+    {"КОМАНДОВАНИЕ: СИГНАЛЫ ТРЁХ МИРОВ СИНХРОНИЗИРОВАНЫ.", "Вернитесь на границу и подготовьтесь к финальному прорыву.", WORLD_WINTER},
+    {"ФИНАЛЬНЫЙ ПРОТОКОЛ: РАЗЛОМ ОТКРЫВАЕТСЯ. ВСЕ ВРАЖЕСКИЕ СИЛЫ ПРИВЕДЕНЫ В ДВИЖЕНИЕ.", "Переживите финальную атаку и уничтожьте оставшихся противников.", WORLD_MAIN},
+    {"ФИНАЛЬНАЯ ПЕРЕДАЧА: ЯДРО МОЖЕТ ЗАКРЫТЬ РАЗЛОМ, НО ТОЛЬКО ОДИН РАЗ.", "Доберитесь до центральной командной зоны.", WORLD_MAIN},
+    {"КОМАНДОВАНИЕ: КЛЮЧ ЯДРА ПОЛУЧЕН. ПРИКРЫВАЙТЕ ГРУППУ ЭВАКУАЦИИ.", "Удерживайте командную зону до завершения эвакуации.", WORLD_MAIN},
+    {"ЭВАКУАЦИЯ: РАЗЛОМ РУХНЕТ. ПРОДОЛЖАЙТЕ БОЙ.", "Завершите операцию, достигнув периметра эвакуации.", WORLD_MAIN},
+    {"ЭПИЛОГ: ПОГРАНИЧНЫЕ СТАНЦИИ СНОВА ПОЛУЧАЮТ ЧИСТЫЙ СИГНАЛ.", "Операция «Разлом» завершена. Продолжайте кампанию или исследуйте мир.", WORLD_MAIN}
 };
 
 static constexpr int STORY_BEAT_COUNT = sizeof(g_storyBeats) / sizeof(g_storyBeats[0]);
 
 static std::string g_message =
-    "OPERATION RIFTFALL: SURVIVE AND SECURE THE FRONTIER";
+    "ОПЕРАЦИЯ «РАЗЛОМ»: ВЫЖИВИТЕ И ЗАЩИТИТЕ ГРАНИЦУ.";
 
 // ============================================================
 // WEAPONS
@@ -467,6 +518,7 @@ struct WorldObject
 
     bool active;
     int world = WORLD_MAIN;
+    float yaw = 0.0f;
 };
 
 static std::vector<WorldObject> g_objects;
@@ -1666,10 +1718,14 @@ static void drawMedkit(float x, float baseY, float z)
 static void drawBuildingWall(const WorldObject& o)
 {
     // Large settlement walls use a warmer, house-like material.
-    drawBox(o.x, o.y, o.z, o.sx, o.sy, o.sz, 0.52f, 0.30f, 0.16f);
+    glPushMatrix();
+    glTranslatef(o.x,o.y,o.z);
+    glRotatef(o.yaw*57.2958f,0,1,0);
+    drawBox(0,0,0,o.sx,o.sy,o.sz,0.52f,0.30f,0.16f);
+    glPopMatrix();
 }
 
-static void drawHouseRoof(float x, float y, float z, float w, float d)
+static void drawHouseRoof(float x, float y, float z, float w, float d, float yaw)
 {
     // The roof is deliberately drawn above the wall top.  It uses two
     // sloped slabs plus a ridge instead of a buried flat box, so it remains
@@ -1682,21 +1738,27 @@ static void drawHouseRoof(float x, float y, float z, float w, float d)
 
     glPushMatrix();
     glTranslatef(x, y + 0.30f, z);
-    glRotatef(-slope, 0.0f, 0.0f, 1.0f);
+    glRotatef(yaw * 57.2958f, 0.0f, 1.0f, 0.0f);
+    glRotatef(slope, 0.0f, 0.0f, 1.0f);
     drawBox(-halfW * 0.25f, 0.0f, 0.0f, halfW * 0.52f, 0.48f, roofD,
             0.24f, 0.12f, 0.08f);
     glPopMatrix();
 
     glPushMatrix();
     glTranslatef(x, y + 0.30f, z);
-    glRotatef(slope, 0.0f, 0.0f, 1.0f);
+    glRotatef(yaw * 57.2958f, 0.0f, 1.0f, 0.0f);
+    glRotatef(-slope, 0.0f, 0.0f, 1.0f);
     drawBox(halfW * 0.25f, 0.0f, 0.0f, halfW * 0.52f, 0.48f, roofD,
             0.24f, 0.12f, 0.08f);
     glPopMatrix();
 
     // Raised ridge makes the roof silhouette unmistakable from a distance.
-    drawBox(x, y + 0.48f + rise, z, 0.72f, 0.34f, roofD + 0.12f,
+    glPushMatrix();
+    glTranslatef(x, y + 0.48f + rise, z);
+    glRotatef(yaw * 57.2958f, 0.0f, 1.0f, 0.0f);
+    drawBox(0, 0, 0, 0.72f, 0.34f, roofD + 0.12f,
             0.30f, 0.16f, 0.10f);
+    glPopMatrix();
 }
 
 static void addHouse(float cx, float cz, float rotation = 0.0f)
@@ -1715,7 +1777,7 @@ static void addHouse(float cx, float cz, float rotation = 0.0f)
     {
         const float x = cx + lx*c - lz*si;
         const float z = cz + lx*si + lz*c;
-        g_objects.push_back({OBJECT_BUILDING, x, sy*0.5f, z, sx, sy, sz, true});
+        g_objects.push_back({OBJECT_BUILDING, x, sy*0.5f, z, sx, sy, sz, true, WORLD_MAIN, rotation});
     };
 
     // Front wall, split around the doorway.
@@ -1728,7 +1790,7 @@ static void addHouse(float cx, float cz, float rotation = 0.0f)
     // Dedicated roof: the old generic addPart() placed this at sy*0.5,
     // burying it at ground level.
     g_objects.push_back({OBJECT_HOUSE_ROOF, cx, H + 0.22f, cz,
-                         W + 0.35f, 0.45f, D + 0.35f, true});
+                         W + 0.35f, 0.45f, D + 0.35f, true, WORLD_MAIN, rotation});
 
     // Door lintel above the entrance.
     addPart(0.0f, -D*0.5f, DOOR, 1.4f, T);
@@ -3890,9 +3952,9 @@ static void createWorldPortals()
 
 static const char* worldName(int w)
 {
-    if (w == WORLD_OCEAN) return "OCEAN WORLD";
-    if (w == WORLD_WINTER) return "WINTER WORLD";
-    return "MAIN WORLD";
+    if (w == WORLD_OCEAN) return "МОРСКОЙ МИР";
+    if (w == WORLD_WINTER) return "ЗИМНИЙ МИР";
+    return "ОСНОВНОЙ МИР";
 }
 
 static void drawWorldPortal(float x, float z, int targetWorld, bool returnPortal)
@@ -4354,6 +4416,56 @@ static void drawDecor()
     }
 }
 
+static void drawHouseDetails()
+{
+    // Add doors, windows, frames and roof trim to each house without creating
+    // extra collision objects. Details follow the exact house rotation.
+    for (const auto& o : g_objects)
+    {
+        if (!o.active || o.world != g_world || o.type != OBJECT_HOUSE_ROOF) continue;
+        const float W = o.sx - 0.35f;
+        const float D = o.sz - 0.35f;
+        const float H = 5.5f;
+        const float c=cosf(o.yaw), si=sinf(o.yaw);
+        auto tr=[&](float lx,float ly,float lz,float& x,float& y,float& z){ x=o.x+lx*c-lz*si; y=ly; z=o.z+lx*si+lz*c; };
+        float x,y,z;
+        // Front door and two windows.
+        tr(0,1.35f,-D*0.5f-0.08f,x,y,z); drawBox(x,y,z,2.1f,2.7f,0.12f,0.08f,0.06f,0.04f);
+        tr(-3.65f,2.9f,-D*0.5f-0.10f,x,y,z); drawBox(x,y,z,1.7f,1.55f,0.10f,0.12f,0.45f,0.70f);
+        tr( 3.65f,2.9f,-D*0.5f-0.10f,x,y,z); drawBox(x,y,z,1.7f,1.55f,0.10f,0.12f,0.45f,0.70f);
+        // Cross mullions and warm interior light.
+        for(float lx : {-3.65f,3.65f}) {
+            tr(lx,2.9f,-D*0.5f-0.17f,x,y,z);
+            drawBox(x,y,z,0.10f,1.55f,0.05f,0.72f,0.86f,0.92f);
+            drawBox(x,y,z,1.7f,0.10f,0.05f,0.72f,0.86f,0.92f);
+        }
+        // Roof fascia along the two eaves.
+        tr(0,H+0.10f,-D*0.5f-0.55f,x,y,z);
+        glPushMatrix(); glTranslatef(x,y,z); glRotatef(o.yaw*57.2958f,0,1,0); drawBox(0,0,0,W+1.2f,0.30f,0.22f,0.20f,0.09f,0.06f); glPopMatrix();
+    }
+}
+
+static void drawWinterSnowAndAtmosphere()
+{
+    if (g_world != WORLD_WINTER) return;
+    glDisable(GL_FOG);
+    glPointSize(2.2f);
+    glBegin(GL_POINTS);
+    // Deterministic drifting snow field; animated from game time, no RNG per frame.
+    for (int i=0;i<850;++i)
+    {
+        const float fx=fmodf(i*37.13f + 11.0f, 520.0f)-260.0f;
+        const float fz=fmodf(i*71.77f + 23.0f, 520.0f)-260.0f;
+        float fy=fmodf(i*19.37f + g_gameTime*(3.0f + (i%5)*0.45f), 32.0f)+2.0f;
+        const float wx=fx + sinf(g_gameTime*0.35f + i)*1.7f;
+        const float wz=fz + cosf(g_gameTime*0.27f + i*0.31f)*1.2f;
+        glColor3f(0.92f,0.97f,1.0f);
+        glVertex3f(g_px+wx, fy + terrainHeight(g_px+wx,g_pz+wz), g_pz+wz);
+    }
+    glEnd();
+    glEnable(GL_FOG);
+}
+
 static void drawWorld()
 {
     const int GRID = 144;
@@ -4397,6 +4509,8 @@ static void drawWorld()
             glEnd();
         }
     }
+
+    drawWinterSnowAndAtmosphere();
 
     // Inter-world portals are independent of ordinary collision objects, so
     // they cannot conflict with buildings, trees, pickups or tunnel physics.
@@ -4624,7 +4738,7 @@ static void drawWorld()
         }
         else if (o.type == OBJECT_HOUSE_ROOF)
         {
-            drawHouseRoof(o.x, o.y, o.z, o.sx, o.sz);
+            drawHouseRoof(o.x, o.y, o.z, o.sx, o.sz, o.yaw);
         }
         else if (o.type == OBJECT_SKYSCRAPER)
         {
@@ -4654,6 +4768,9 @@ static void drawWorld()
             drawMedkit(o.x, o.y - o.sy * 0.5f, o.z);
         }
     }
+
+    if (g_world == WORLD_MAIN)
+        drawHouseDetails();
 }
 
 static void createOceanSubmarines()
