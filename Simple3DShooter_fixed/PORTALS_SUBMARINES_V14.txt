@@ -1,0 +1,11 @@
+Multiverse v14
+==============
+- Main-world inter-world portals increased from 6 to 60 (10x).
+- Each destination world now has 10 return portals instead of 1 (10x).
+- Portal positions are distributed around the outer ring of the main map and in separate local rings in destination worlds.
+- Ocean world: six giant flying submarines patrol the sky.
+- Submarines have unique large silhouettes, fins, conning towers and rocket launch tubes.
+- Submarines fire large, mildly homing rockets at the player.
+- Heavy rockets have a larger hit radius and do not collide with main-world objects/tunnel shells.
+- Submarines and their markers are only active/rendered in the ocean world.
+- Source files passed C++17 syntax checks with -Wall -Wextra -Wpedantic using a local GLFW/OpenGL stub.

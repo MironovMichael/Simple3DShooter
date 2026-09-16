@@ -97,6 +97,24 @@ struct WorldPortal
 static std::vector<WorldPortal> g_worldPortals;
 
 
+struct OceanSubmarine
+{
+    float x, y, z;
+    float yaw;
+    float speed;
+    float orbitRadius;
+    float phase;
+    float rocketCooldown;
+    float hp;
+    bool active;
+};
+static std::vector<OceanSubmarine> g_oceanSubmarines;
+static void createOceanSubmarines();
+static void updateOceanSubmarines(float dt);
+static void drawOceanSubmarines();
+static void spawnOceanSubmarineRocket(const OceanSubmarine& s);
+
+
 
 static float terrainHeight(float x, float z);
 static float distance2D(float x1, float z1, float x2, float z2);
@@ -473,6 +491,10 @@ struct Projectile
     float damage;
 
     bool active;
+
+    // Heavy rockets fired by the giant flying submarines.
+    bool heavyRocket = false;
+    float radius = 0.10f;
 };
 
 static std::vector<Projectile> g_projectiles;
@@ -2558,6 +2580,7 @@ static void resetGame()
     createWorld();
     createWorldPortals();
     createOtherWorldObjects();
+    createOceanSubmarines();
     g_enemies.clear();
     g_world = WORLD_MAIN;
     g_worldSeeded[WORLD_MAIN] = true;
@@ -2863,6 +2886,24 @@ static void updateEnemyProjectiles(float dt)
         if (!p.active)
             continue;
 
+        if (p.heavyRocket)
+        {
+            // Mild homing: the submarine missile bends toward the player's
+            // current position instead of being a perfectly straight shot.
+            float tx=g_px-p.x, ty=(g_py+0.9f)-p.y, tz=g_pz-p.z;
+            const float tl=sqrtf(tx*tx+ty*ty+tz*tz);
+            if (tl > 0.001f)
+            {
+                tx/=tl; ty/=tl; tz/=tl;
+                const float turn=clampf(dt*1.15f,0.0f,0.20f);
+                p.dx += (tx-p.dx)*turn;
+                p.dy += (ty-p.dy)*turn;
+                p.dz += (tz-p.dz)*turn;
+                const float nl=sqrtf(p.dx*p.dx+p.dy*p.dy+p.dz*p.dz);
+                if(nl>0.001f){p.dx/=nl;p.dy/=nl;p.dz/=nl;}
+            }
+        }
+
         const float oldX = p.x;
         const float oldY = p.y;
         const float oldZ = p.z;
@@ -2891,7 +2932,7 @@ static void updateEnemyProjectiles(float dt)
         const float segLen = sqrtf(vx*vx + vy*vy + vz*vz);
         bool blocked = false;
 
-        if (segLen > 0.0001f)
+        if (segLen > 0.0001f && !p.heavyRocket)
         {
             for (const auto& o : g_objects)
             {
@@ -2913,7 +2954,7 @@ static void updateEnemyProjectiles(float dt)
             }
         }
 
-        if (!blocked && tunnelWallHitSegment(oldX,oldY,oldZ,p.x,p.y,p.z))
+        if (!p.heavyRocket && !blocked && tunnelWallHitSegment(oldX,oldY,oldZ,p.x,p.y,p.z))
             blocked = true;
 
         if (blocked)
@@ -2924,7 +2965,7 @@ static void updateEnemyProjectiles(float dt)
 
         if (g_deadTimer <= 0.0f &&
             segmentSphereHit(oldX, oldY, oldZ, p.x, p.y, p.z,
-                             g_px, playerY, g_pz, 0.55f))
+                             g_px, playerY, g_pz, p.heavyRocket ? 1.15f : 0.55f))
         {
             damagePlayer(p.damage);
             p.active = false;
@@ -3256,6 +3297,7 @@ static void updateGame(float dt)
 
     updatePlayer(dt);
     updateWorldPortals();
+    updateOceanSubmarines(dt);
 
     updateEnemies(dt);
     updateEnemyProjectiles(dt);
@@ -3415,14 +3457,40 @@ static void createWorldPortals()
 {
     g_worldPortals.clear();
 
-    // Main world: spread portals across distant, open sectors. None is placed
-    // on the city footprint, settlements, or tunnel centerlines.
-    g_worldPortals.push_back({-520.0f, -470.0f, WORLD_OCEAN, 0.0f, 0.0f, 4.2f});
-    g_worldPortals.push_back({ 500.0f, -455.0f, WORLD_OCEAN, 0.0f, 0.0f, 4.2f});
-    g_worldPortals.push_back({-500.0f,  465.0f, WORLD_WINTER, 0.0f, 0.0f, 4.2f});
-    g_worldPortals.push_back({ 475.0f,  470.0f, WORLD_WINTER, 0.0f, 0.0f, 4.2f});
-    g_worldPortals.push_back({ 535.0f, -115.0f, WORLD_MAIN, CITY_CENTER_X, CITY_CENTER_Z, 4.2f});
-    g_worldPortals.push_back({-535.0f,  115.0f, WORLD_MAIN, CITY_CENTER_X, CITY_CENTER_Z, 4.2f});
+    // 10x portal density: 60 portals are distributed around the main world.
+    // They are kept near the outer ring so they do not overlap the city,
+    // settlements and the central tunnel network.
+    constexpr int PORTALS_PER_WORLD = 30;
+    constexpr float PORTAL_RING = 548.0f;
+
+    // Ten safe return pads in each destination world. Main-world portals are
+    // paired with these pads in a repeating pattern.
+    for (int i = 0; i < 10; ++i)
+    {
+        const float a = (2.0f * (float)M_PI * i) / 10.0f;
+        const float r = 230.0f + 18.0f * (i % 2);
+        const float ox = cosf(a) * r;
+        const float oz = sinf(a) * r;
+        const float wx = cosf(a + 0.18f) * r;
+        const float wz = sinf(a + 0.18f) * r;
+
+        // Main-world portals alternate between ocean and winter. Their
+        // destination is one of the ten return portals in that world.
+        for (int k = 0; k < PORTALS_PER_WORLD / 10; ++k)
+        {
+            const int n = i * 3 + k;
+            const float ao = (2.0f * (float)M_PI * n) / PORTALS_PER_WORLD + 0.025f;
+            const float aw = (2.0f * (float)M_PI * n) / PORTALS_PER_WORLD + 0.075f;
+            g_worldPortals.push_back({
+                cosf(ao) * PORTAL_RING, sinf(ao) * PORTAL_RING,
+                WORLD_OCEAN, ox, oz, 4.2f
+            });
+            g_worldPortals.push_back({
+                cosf(aw) * PORTAL_RING, sinf(aw) * PORTAL_RING,
+                WORLD_WINTER, wx, wz, 4.2f
+            });
+        }
+    }
 }
 
 static const char* worldName(int w)
@@ -3552,11 +3620,6 @@ static void enterWorldPortal(const WorldPortal& p)
 
     g_px = dx;
     g_pz = dz;
-    if (g_world == WORLD_OCEAN && distance2D(g_px,g_pz,0,0) > 20.0f)
-    {
-        g_px=0.0f; g_pz=0.0f;
-    }
-
     g_py = terrainHeight(g_px,g_pz) + 0.03f;
     g_vy = 0.0f;
     g_onGround = true;
@@ -3572,9 +3635,19 @@ static void updateWorldPortals()
     {
         if (g_world != WORLD_MAIN)
         {
-            WorldPortal back{0.0f,0.0f,WORLD_MAIN,0.0f,0.0f,4.2f};
-            if (distance2D(g_px,g_pz,0.0f,0.0f) <= back.radius + 1.2f)
-                enterWorldPortal(back);
+            for (int i = 0; i < 10; ++i)
+            {
+                const float a = (2.0f * (float)M_PI * i) / 10.0f;
+                const float r = 230.0f + 18.0f * (i % 2);
+                const float px = cosf(a + (g_world == WORLD_WINTER ? 0.18f : 0.0f)) * r;
+                const float pz = sinf(a + (g_world == WORLD_WINTER ? 0.18f : 0.0f)) * r;
+                if (distance2D(g_px,g_pz,px,pz) <= 4.2f + 1.2f)
+                {
+                    WorldPortal back{px,pz,WORLD_MAIN,0.0f,0.0f,4.2f};
+                    enterWorldPortal(back);
+                    break;
+                }
+            }
         }
         else
         {
@@ -3869,6 +3942,9 @@ static void drawWorld()
         drawBox(0.0f, waterY, 0.0f, span, 0.05f, span, 0.025f,0.16f,0.24f);
     }
 
+    if (g_world == WORLD_OCEAN)
+        drawOceanSubmarines();
+
     if (g_world == WORLD_MAIN)
     {
         for (const auto& p : g_worldPortals)
@@ -3880,8 +3956,18 @@ static void drawWorld()
     }
     else
     {
-        // Every destination world has one return portal at its safe landing area.
-        drawWorldPortal(0.0f,0.0f,WORLD_MAIN,true);
+        // Ten return portals per destination world. They are local to the
+        // current world and therefore never overlap main-world geometry.
+        for (int i = 0; i < 10; ++i)
+        {
+            const float a = (2.0f * (float)M_PI * i) / 10.0f;
+            const float r = 230.0f + 18.0f * (i % 2);
+            const float px = cosf(a + (g_world == WORLD_WINTER ? 0.18f : 0.0f)) * r;
+            const float pz = sinf(a + (g_world == WORLD_WINTER ? 0.18f : 0.0f)) * r;
+            const float dx = px-g_px, dz=pz-g_pz;
+            if (dx*dx+dz*dz < OBJECT_RENDER_DISTANCE*OBJECT_RENDER_DISTANCE)
+                drawWorldPortal(px,pz,WORLD_MAIN,true);
+        }
     }
 
     // Separate city biome: roads and plaza are drawn above the flat city terrain.
@@ -4088,6 +4174,125 @@ static void drawWorld()
     }
 }
 
+static void createOceanSubmarines()
+{
+    g_oceanSubmarines.clear();
+    // Six giant airborne submarines patrol the ocean world. They are placed
+    // well above the terrain and spread across separate orbital lanes.
+    for (int i = 0; i < 6; ++i)
+    {
+        const float a = (2.0f * (float)M_PI * i) / 6.0f;
+        OceanSubmarine sub{};
+        sub.x = cosf(a) * 360.0f;
+        sub.z = sinf(a) * 360.0f;
+        sub.y = 46.0f + 8.0f * (i % 3);
+        sub.yaw = a + (float)M_PI * 0.5f;
+        sub.speed = 18.0f + 2.0f * (i % 3);
+        sub.orbitRadius = 310.0f + 28.0f * (i % 2);
+        sub.phase = a;
+        sub.rocketCooldown = 1.2f + 0.55f * i;
+        sub.hp = 260.0f;
+        sub.active = true;
+        g_oceanSubmarines.push_back(sub);
+    }
+}
+
+static void spawnOceanSubmarineRocket(const OceanSubmarine& s)
+{
+    const float targetY = g_py + 0.9f;
+    float dx = g_px - s.x;
+    float dy = targetY - s.y;
+    float dz = g_pz - s.z;
+    const float len = sqrtf(dx*dx + dy*dy + dz*dz);
+    if (len < 0.001f) return;
+    dx /= len; dy /= len; dz /= len;
+
+    Projectile p{};
+    p.x = s.x;
+    p.y = s.y - 2.5f;
+    p.z = s.z;
+    p.dx = dx; p.dy = dy; p.dz = dz;
+    p.speed = 34.0f;
+    p.damage = 38.0f;
+    p.active = true;
+    p.heavyRocket = true;
+    p.radius = 0.65f;
+    g_projectiles.push_back(p);
+}
+
+static void updateOceanSubmarines(float dt)
+{
+    if (g_world != WORLD_OCEAN) return;
+    if (g_oceanSubmarines.empty()) createOceanSubmarines();
+
+    for (auto& s : g_oceanSubmarines)
+    {
+        if (!s.active) continue;
+
+        // Smooth circular patrol around the ocean world's center.
+        s.phase += (s.speed / std::max(s.orbitRadius,1.0f)) * dt;
+        const float desiredX = cosf(s.phase) * s.orbitRadius;
+        const float desiredZ = sinf(s.phase) * s.orbitRadius;
+        const float blend = clampf(dt * 0.8f, 0.0f, 1.0f);
+        const float oldX=s.x, oldZ=s.z;
+        s.x += (desiredX-s.x)*blend;
+        s.z += (desiredZ-s.z)*blend;
+        s.y = 48.0f + 7.0f*sinf(g_gameTime*0.7f + s.phase*2.0f);
+        const float vx=s.x-oldX, vz=s.z-oldZ;
+        if (fabsf(vx)+fabsf(vz) > 0.0001f)
+            s.yaw = atan2f(vx, -vz);
+
+        s.rocketCooldown -= dt;
+        const float d=distance2D(s.x,s.z,g_px,g_pz);
+        if (s.rocketCooldown <= 0.0f && d < 520.0f)
+        {
+            spawnOceanSubmarineRocket(s);
+            // Staggered salvos keep several submarines threatening without
+            // turning the ocean world into an unavoidable bullet wall.
+            s.rocketCooldown = 2.8f + 0.6f * ((int)(s.phase*10.0f) % 3);
+        }
+    }
+}
+
+static void drawOceanSubmarines()
+{
+    if (g_world != WORLD_OCEAN) return;
+    for (const auto& s : g_oceanSubmarines)
+    {
+        if (!s.active) continue;
+        const float dx=s.x-g_px, dz=s.z-g_pz;
+        if (dx*dx+dz*dz > 700.0f*700.0f) continue;
+
+        glPushMatrix();
+        glTranslatef(s.x,s.y,s.z);
+        glRotatef(-s.yaw*180.0f/(float)M_PI,0,1,0);
+
+        // Giant hull.
+        drawBox(0,0,0,18.0f,6.5f,46.0f,0.07f,0.20f,0.26f);
+        drawBox(0,0,-18.0f,13.0f,5.2f,12.0f,0.05f,0.14f,0.19f);
+        drawBox(0,0,18.0f,13.0f,5.2f,12.0f,0.05f,0.14f,0.19f);
+
+        // Conning tower and command bridge.
+        drawBox(0,4.7f,-2.0f,6.0f,4.0f,9.0f,0.08f,0.24f,0.30f);
+        drawBox(0,7.2f,-5.0f,3.0f,1.2f,5.0f,0.25f,0.55f,0.62f);
+
+        // Four large fins make the silhouette unmistakable from the ground.
+        drawBox(-10.5f,0.0f,-4.0f,7.0f,1.0f,11.0f,0.04f,0.12f,0.16f);
+        drawBox( 10.5f,0.0f,-4.0f,7.0f,1.0f,11.0f,0.04f,0.12f,0.16f);
+        drawBox(0,0,22.5f,5.0f,7.0f,8.0f,0.04f,0.12f,0.16f);
+        drawBox(0,0,-22.5f,5.0f,7.0f,8.0f,0.04f,0.12f,0.16f);
+
+        // Engine glow bars.
+        drawBox(-5.0f,0,-24.0f,2.0f,2.0f,2.0f,0.08f,0.70f,0.95f);
+        drawBox( 5.0f,0,-24.0f,2.0f,2.0f,2.0f,0.08f,0.70f,0.95f);
+
+        // Rocket launch tubes under the hull.
+        drawBox(-5.5f,-4.0f,5.0f,2.8f,2.0f,7.0f,0.12f,0.10f,0.09f);
+        drawBox( 5.5f,-4.0f,5.0f,2.8f,2.0f,7.0f,0.12f,0.10f,0.09f);
+        glPopMatrix();
+    }
+}
+
 static void drawEnemyProjectiles()
 {
     for (const auto& p : g_projectiles)
@@ -4095,9 +4300,27 @@ static void drawEnemyProjectiles()
         if (!p.active)
             continue;
 
-        drawBox(p.x, p.y, p.z,
-                0.12f, 0.12f, 0.12f,
-                0.95f, 0.25f, 0.05f);
+        if (p.heavyRocket)
+        {
+            glPushMatrix();
+            glTranslatef(p.x,p.y,p.z);
+            const float yaw = atan2f(p.dx, -p.dz);
+            const float pitch = atan2f(p.dy, sqrtf(p.dx*p.dx+p.dz*p.dz));
+            glRotatef(-yaw*180.0f/(float)M_PI,0,1,0);
+            glRotatef(pitch*180.0f/(float)M_PI,1,0,0);
+            drawBox(0,0,-1.8f,1.15f,1.15f,4.6f,0.70f,0.12f,0.04f);
+            drawBox(0,0,-4.15f,1.45f,1.45f,1.0f,0.82f,0.18f,0.04f);
+            drawBox(-1.0f,0.0f,-2.1f,0.18f,0.35f,1.4f,0.30f,0.07f,0.03f);
+            drawBox( 1.0f,0.0f,-2.1f,0.18f,0.35f,1.4f,0.30f,0.07f,0.03f);
+            drawBox(0,-0.05f,2.0f,0.55f,0.55f,0.8f,0.95f,0.45f,0.06f);
+            glPopMatrix();
+        }
+        else
+        {
+            drawBox(p.x, p.y, p.z,
+                    0.12f, 0.12f, 0.12f,
+                    0.95f, 0.25f, 0.05f);
+        }
     }
 }
 
@@ -4498,16 +4721,42 @@ static void drawRadar(int W, int H)
     }
     else
     {
-        // Return portal at the center of each destination world.
-        const float dx=-g_px, dz=-g_pz;
-        if(dx*dx+dz*dz <= range*range)
+        // Ten return portals are visible on the minimap of each destination world.
+        for (int i=0;i<10;++i)
         {
+            const float a=(2.0f*(float)M_PI*i)/10.0f;
+            const float r=230.0f+18.0f*(i%2);
+            const float wx=cosf(a+(g_world==WORLD_WINTER?0.18f:0.0f))*r;
+            const float wz=sinf(a+(g_world==WORLD_WINTER?0.18f:0.0f))*r;
+            const float dx=wx-g_px, dz=wz-g_pz;
+            if(dx*dx+dz*dz > range*range) continue;
             const float px=cx+(dx/range)*radius, py=cy+(dz/range)*radius;
+            const float qx=px-cx, qy=py-cy;
+            if(qx*qx+qy*qy >= (radius-4.0f)*(radius-4.0f)) continue;
             glColor3f(1.0f,0.30f,0.90f);
             glVertex2f(px,py);
         }
     }
     glEnd();
+
+    // Giant flying submarine markers (ocean world only).
+    if (g_world == WORLD_OCEAN)
+    {
+        glPointSize(5.0f);
+        glBegin(GL_POINTS);
+        for (const auto& sub : g_oceanSubmarines)
+        {
+            if (!sub.active) continue;
+            const float dx=sub.x-g_px, dz=sub.z-g_pz;
+            if(dx*dx+dz*dz > range*range) continue;
+            const float px=cx+(dx/range)*radius, py=cy+(dz/range)*radius;
+            const float qx=px-cx, qy=py-cy;
+            if(qx*qx+qy*qy >= (radius-4.0f)*(radius-4.0f)) continue;
+            glColor3f(0.95f,0.35f,0.08f);
+            glVertex2f(px,py);
+        }
+        glEnd();
+    }
 
     // Unique-object markers.
     glPointSize(4.0f);

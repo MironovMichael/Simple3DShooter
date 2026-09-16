@@ -42,7 +42,7 @@ rule CUSTOM_COMMAND
 # Rule for re-running cmake.
 
 rule RERUN_CMAKE
-  command = C:\msys64\ucrt64\bin\cmake.exe --regenerate-during-build -SC:\Users\Михаил\OneDrive\Документы\c++\Simple3DShooter_fixed -BC:\Users\Михаил\OneDrive\Документы\c++\Simple3DShooter_fixed\build
+  command = C:\msys64\ucrt64\bin\cmake.exe --regenerate-during-build -SC:\Users\Михаил\OneDrive\Документы\c++\Simple3DShooter\Simple3DShooter_fixed -BC:\Users\Михаил\OneDrive\Документы\c++\Simple3DShooter\Simple3DShooter_fixed\build
   description = Re-running CMake...
   generator = 1
 
