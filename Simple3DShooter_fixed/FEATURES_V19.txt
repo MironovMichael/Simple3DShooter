@@ -4,3 +4,9 @@ V19 changes
 - Player hitscan weapons can intercept incoming submarine heavy rockets; destroyed rockets create a small harmless explosion and HUD message.
 - Tank models enlarged by 1.65x and tank hitboxes increased to match the new silhouette.
 - Hitscan enemy selection now ignores enemies belonging to another world.
+
+--- V25 QUALITY PASS ---
+1. Документ уточнён для файла «FEATURES V19»: добавлены проверяемые сведения о текущей версии.
+2. Добавлена отдельная секция контроля сборки и совместимости, чтобы старые инструкции не конфликтовали с актуальным проектом.
+3. Добавлены заметки по стабильности, производительности и диагностике ошибок для следующего цикла разработки.
+

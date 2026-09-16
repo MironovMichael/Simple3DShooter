@@ -61,4 +61,9 @@ private:
     float bobTime;
 
     int amount;
+    // V25 item quality helpers: safe amount changes and interaction distance.
+    bool canCollect(const Vec3& collector, float extraRadius = 0.0f) const;
+    float getInteractionRadius() const;
+    void clampAmount(int minimum = 0, int maximum = 999);
+
 };

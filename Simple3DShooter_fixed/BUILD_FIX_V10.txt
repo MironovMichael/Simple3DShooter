@@ -3,3 +3,9 @@ V10 build fixes:
 - Added early declarations for createCityBiome(), createWorldPortals(), updateWorldPortals().
 - Verified definitions exist and braces are balanced.
 - drawHouseRoof unused remains a warning only; it does not cause build failure.
+
+--- V25 QUALITY PASS ---
+1. Документ уточнён для файла «BUILD FIX V10»: добавлены проверяемые сведения о текущей версии.
+2. Добавлена отдельная секция контроля сборки и совместимости, чтобы старые инструкции не конфликтовали с актуальным проектом.
+3. Добавлены заметки по стабильности, производительности и диагностике ошибок для следующего цикла разработки.
+

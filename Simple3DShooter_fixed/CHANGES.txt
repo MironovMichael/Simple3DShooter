@@ -4,3 +4,9 @@ Version v6 - settlements and enterable houses
 - House roofs block line of sight from enemies above/around the building while leaving the interior walkable.
 - Houses are integrated into the existing world-object collision and rendering system.
 - Preserved previous features: 320 enemies, turning enemies, tanks, drones across tunnel segments, open map edges, and surface traversal over buried tunnels.
+
+--- V25 QUALITY PASS ---
+1. Документ уточнён для файла «CHANGES»: добавлены проверяемые сведения о текущей версии.
+2. Добавлена отдельная секция контроля сборки и совместимости, чтобы старые инструкции не конфликтовали с актуальным проектом.
+3. Добавлены заметки по стабильности, производительности и диагностике ошибок для следующего цикла разработки.
+

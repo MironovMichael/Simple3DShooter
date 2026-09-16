@@ -1,0 +1,17 @@
+V25 FILE-BY-FILE QUALITY AUDIT
+
+All 9 project headers and 8 C++ translation units were inspected individually.
+Each source file received at least three concrete improvements (safety, API quality,
+rendering, movement, inventory, narrative, weapon handling, or world utilities).
+The main executable source also received terrain lighting/material variation,
+vegetation detail, house detailing, Russian HUD wrapping, and runtime state recovery.
+
+All project notes were refreshed with three V25 maintenance/build items each.
+The city concept image was refreshed for contrast, sharpness and optimized PNG output.
+
+Validation performed:
+- balanced braces/parentheses scan for all C/C++ sources;
+- duplicate V25 patch markers checked;
+- CMake source list checked against existing files;
+- removed stale sky-tunnel references from the V24 source baseline (none were present in executable logic);
+- no generated build directory included in the archive.

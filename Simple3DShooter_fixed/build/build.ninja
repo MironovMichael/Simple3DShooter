@@ -53,7 +53,7 @@ build CMakeFiles/Simple3DShooter.dir/src/main.cpp.obj: CXX_COMPILER__Simple3DSho
   CONFIG = Release
   DEFINES = -DGLFW_DLL
   DEP_FILE = CMakeFiles\Simple3DShooter.dir\src\main.cpp.obj.d
-  FLAGS = -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic
+  FLAGS = -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections
   INCLUDES = -IC:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src
   OBJECT_DIR = CMakeFiles\Simple3DShooter.dir
   OBJECT_FILE_DIR = CMakeFiles\Simple3DShooter.dir\src
@@ -65,7 +65,7 @@ build CMakeFiles/Simple3DShooter.dir/src/Item.cpp.obj: CXX_COMPILER__Simple3DSho
   CONFIG = Release
   DEFINES = -DGLFW_DLL
   DEP_FILE = CMakeFiles\Simple3DShooter.dir\src\Item.cpp.obj.d
-  FLAGS = -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic
+  FLAGS = -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections
   INCLUDES = -IC:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src
   OBJECT_DIR = CMakeFiles\Simple3DShooter.dir
   OBJECT_FILE_DIR = CMakeFiles\Simple3DShooter.dir\src
@@ -77,7 +77,7 @@ build CMakeFiles/Simple3DShooter.dir/src/ItemManager.cpp.obj: CXX_COMPILER__Simp
   CONFIG = Release
   DEFINES = -DGLFW_DLL
   DEP_FILE = CMakeFiles\Simple3DShooter.dir\src\ItemManager.cpp.obj.d
-  FLAGS = -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic
+  FLAGS = -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections
   INCLUDES = -IC:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src
   OBJECT_DIR = CMakeFiles\Simple3DShooter.dir
   OBJECT_FILE_DIR = CMakeFiles\Simple3DShooter.dir\src
@@ -89,7 +89,7 @@ build CMakeFiles/Simple3DShooter.dir/src/Object.cpp.obj: CXX_COMPILER__Simple3DS
   CONFIG = Release
   DEFINES = -DGLFW_DLL
   DEP_FILE = CMakeFiles\Simple3DShooter.dir\src\Object.cpp.obj.d
-  FLAGS = -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic
+  FLAGS = -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections
   INCLUDES = -IC:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src
   OBJECT_DIR = CMakeFiles\Simple3DShooter.dir
   OBJECT_FILE_DIR = CMakeFiles\Simple3DShooter.dir\src
@@ -101,7 +101,7 @@ build CMakeFiles/Simple3DShooter.dir/src/Player.cpp.obj: CXX_COMPILER__Simple3DS
   CONFIG = Release
   DEFINES = -DGLFW_DLL
   DEP_FILE = CMakeFiles\Simple3DShooter.dir\src\Player.cpp.obj.d
-  FLAGS = -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic
+  FLAGS = -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections
   INCLUDES = -IC:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src
   OBJECT_DIR = CMakeFiles\Simple3DShooter.dir
   OBJECT_FILE_DIR = CMakeFiles\Simple3DShooter.dir\src
@@ -113,7 +113,7 @@ build CMakeFiles/Simple3DShooter.dir/src/Story.cpp.obj: CXX_COMPILER__Simple3DSh
   CONFIG = Release
   DEFINES = -DGLFW_DLL
   DEP_FILE = CMakeFiles\Simple3DShooter.dir\src\Story.cpp.obj.d
-  FLAGS = -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic
+  FLAGS = -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections
   INCLUDES = -IC:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src
   OBJECT_DIR = CMakeFiles\Simple3DShooter.dir
   OBJECT_FILE_DIR = CMakeFiles\Simple3DShooter.dir\src
@@ -125,7 +125,7 @@ build CMakeFiles/Simple3DShooter.dir/src/Weapon.cpp.obj: CXX_COMPILER__Simple3DS
   CONFIG = Release
   DEFINES = -DGLFW_DLL
   DEP_FILE = CMakeFiles\Simple3DShooter.dir\src\Weapon.cpp.obj.d
-  FLAGS = -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic
+  FLAGS = -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections
   INCLUDES = -IC:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src
   OBJECT_DIR = CMakeFiles\Simple3DShooter.dir
   OBJECT_FILE_DIR = CMakeFiles\Simple3DShooter.dir\src
@@ -137,7 +137,7 @@ build CMakeFiles/Simple3DShooter.dir/src/World.cpp.obj: CXX_COMPILER__Simple3DSh
   CONFIG = Release
   DEFINES = -DGLFW_DLL
   DEP_FILE = CMakeFiles\Simple3DShooter.dir\src\World.cpp.obj.d
-  FLAGS = -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic
+  FLAGS = -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections
   INCLUDES = -IC:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src
   OBJECT_DIR = CMakeFiles\Simple3DShooter.dir
   OBJECT_FILE_DIR = CMakeFiles\Simple3DShooter.dir\src
@@ -156,6 +156,7 @@ build CMakeFiles/Simple3DShooter.dir/src/World.cpp.obj: CXX_COMPILER__Simple3DSh
 build Simple3DShooter.exe: CXX_EXECUTABLE_LINKER__Simple3DShooter_Release CMakeFiles/Simple3DShooter.dir/src/main.cpp.obj CMakeFiles/Simple3DShooter.dir/src/Item.cpp.obj CMakeFiles/Simple3DShooter.dir/src/ItemManager.cpp.obj CMakeFiles/Simple3DShooter.dir/src/Object.cpp.obj CMakeFiles/Simple3DShooter.dir/src/Player.cpp.obj CMakeFiles/Simple3DShooter.dir/src/Story.cpp.obj CMakeFiles/Simple3DShooter.dir/src/Weapon.cpp.obj CMakeFiles/Simple3DShooter.dir/src/World.cpp.obj | C$:/msys64/ucrt64/lib/libglfw3.dll.a
   CONFIG = Release
   FLAGS = -O3 -DNDEBUG
+  LINK_FLAGS = -Wl,--gc-sections
   LINK_LIBRARIES = C:/msys64/ucrt64/lib/libglfw3.dll.a  -lopengl32  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
   OBJECT_DIR = CMakeFiles\Simple3DShooter.dir
   POST_BUILD = cd .

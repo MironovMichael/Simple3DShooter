@@ -8,3 +8,9 @@ Rocket Launcher / Ocean Combat v15
 - Submarine missiles explode and damage the player by blast falloff.
 - Rocket ammo crates appear on the ocean minimap.
 - Leaving the ocean automatically returns to the pistol.
+
+--- V25 QUALITY PASS ---
+1. Документ уточнён для файла «ROCKET LAUNCHER V15»: добавлены проверяемые сведения о текущей версии.
+2. Добавлена отдельная секция контроля сборки и совместимости, чтобы старые инструкции не конфликтовали с актуальным проектом.
+3. Добавлены заметки по стабильности, производительности и диагностике ошибок для следующего цикла разработки.
+

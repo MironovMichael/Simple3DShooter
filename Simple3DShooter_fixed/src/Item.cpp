@@ -1,6 +1,7 @@
 #include "Item.h"
 
 #include <cmath>
+#include <algorithm>
 
 namespace
 {
@@ -179,4 +180,20 @@ void Item::setAmount(
 
     amount =
         value;
+}
+
+// V25: safer item interaction and quantity handling.
+bool Item::canCollect(const Vec3& collector, float extraRadius) const
+{
+    if (!active) return false;
+    const float r = std::max(0.01f, radius + extraRadius);
+    const float dx = collector.x - position.x, dz = collector.z - position.z;
+    const float dy = collector.y - position.y;
+    return dx*dx + dz*dz <= r*r && std::fabs(dy) <= std::max(1.5f, height + 0.75f);
+}
+float Item::getInteractionRadius() const { return std::max(0.5f, radius + 0.85f); }
+void Item::clampAmount(int minimum, int maximum)
+{
+    if (minimum > maximum) std::swap(minimum, maximum);
+    amount = std::max(minimum, std::min(maximum, amount));
 }

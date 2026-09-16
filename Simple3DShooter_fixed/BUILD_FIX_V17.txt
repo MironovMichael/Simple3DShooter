@@ -7,3 +7,9 @@ Fixed the compilation error in src/main.cpp around line 2163:
 The previous V17 archive contained a malformed loop header introduced during the hitbox patch.
 
 CMake configuration was checked with the source after the fix; this environment does not have OpenGL development libraries, so full linking cannot be performed here. The reported C++ syntax error itself is fixed.
+
+--- V25 QUALITY PASS ---
+1. Документ уточнён для файла «BUILD FIX V17»: добавлены проверяемые сведения о текущей версии.
+2. Добавлена отдельная секция контроля сборки и совместимости, чтобы старые инструкции не конфликтовали с актуальным проектом.
+3. Добавлены заметки по стабильности, производительности и диагностике ошибок для следующего цикла разработки.
+

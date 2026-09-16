@@ -837,3 +837,12 @@ void Story::giveMissionReward(
     pendingAmmoReward +=
         mission.rewardAmmo;
 }
+
+// V25: narrative status helpers.
+float Story::getCurrentProgress() const
+{
+    const Mission* m=getCurrentMission(); if(!m || m->targetAmount<=0) return m ? (m->state==MissionState::Completed?1.0f:0.0f) : 0.0f;
+    return std::clamp(static_cast<float>(m->currentAmount)/static_cast<float>(m->targetAmount),0.0f,1.0f);
+}
+std::string Story::getCurrentTitle() const { const Mission* m=getCurrentMission(); return m ? m->title : std::string(); }
+bool Story::isMissionComplete() const { const Mission* m=getCurrentMission(); return m && m->state==MissionState::Completed; }

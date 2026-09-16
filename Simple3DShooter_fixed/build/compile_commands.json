@@ -1,0 +1,50 @@
+[
+{
+  "directory": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/build",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DGLFW_DLL -IC:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections -o CMakeFiles\\Simple3DShooter.dir\\src\\main.cpp.obj -c C:\\Users\\Михаил\\OneDrive\\Документы\\c++\\Simple3DShooter\\Simple3DShooter_fixed\\src\\main.cpp",
+  "file": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src/main.cpp",
+  "output": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/build/CMakeFiles/Simple3DShooter.dir/src/main.cpp.obj"
+},
+{
+  "directory": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/build",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DGLFW_DLL -IC:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections -o CMakeFiles\\Simple3DShooter.dir\\src\\Item.cpp.obj -c C:\\Users\\Михаил\\OneDrive\\Документы\\c++\\Simple3DShooter\\Simple3DShooter_fixed\\src\\Item.cpp",
+  "file": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src/Item.cpp",
+  "output": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/build/CMakeFiles/Simple3DShooter.dir/src/Item.cpp.obj"
+},
+{
+  "directory": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/build",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DGLFW_DLL -IC:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections -o CMakeFiles\\Simple3DShooter.dir\\src\\ItemManager.cpp.obj -c C:\\Users\\Михаил\\OneDrive\\Документы\\c++\\Simple3DShooter\\Simple3DShooter_fixed\\src\\ItemManager.cpp",
+  "file": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src/ItemManager.cpp",
+  "output": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/build/CMakeFiles/Simple3DShooter.dir/src/ItemManager.cpp.obj"
+},
+{
+  "directory": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/build",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DGLFW_DLL -IC:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections -o CMakeFiles\\Simple3DShooter.dir\\src\\Object.cpp.obj -c C:\\Users\\Михаил\\OneDrive\\Документы\\c++\\Simple3DShooter\\Simple3DShooter_fixed\\src\\Object.cpp",
+  "file": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src/Object.cpp",
+  "output": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/build/CMakeFiles/Simple3DShooter.dir/src/Object.cpp.obj"
+},
+{
+  "directory": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/build",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DGLFW_DLL -IC:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections -o CMakeFiles\\Simple3DShooter.dir\\src\\Player.cpp.obj -c C:\\Users\\Михаил\\OneDrive\\Документы\\c++\\Simple3DShooter\\Simple3DShooter_fixed\\src\\Player.cpp",
+  "file": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src/Player.cpp",
+  "output": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/build/CMakeFiles/Simple3DShooter.dir/src/Player.cpp.obj"
+},
+{
+  "directory": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/build",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DGLFW_DLL -IC:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections -o CMakeFiles\\Simple3DShooter.dir\\src\\Story.cpp.obj -c C:\\Users\\Михаил\\OneDrive\\Документы\\c++\\Simple3DShooter\\Simple3DShooter_fixed\\src\\Story.cpp",
+  "file": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src/Story.cpp",
+  "output": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/build/CMakeFiles/Simple3DShooter.dir/src/Story.cpp.obj"
+},
+{
+  "directory": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/build",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DGLFW_DLL -IC:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections -o CMakeFiles\\Simple3DShooter.dir\\src\\Weapon.cpp.obj -c C:\\Users\\Михаил\\OneDrive\\Документы\\c++\\Simple3DShooter\\Simple3DShooter_fixed\\src\\Weapon.cpp",
+  "file": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src/Weapon.cpp",
+  "output": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/build/CMakeFiles/Simple3DShooter.dir/src/Weapon.cpp.obj"
+},
+{
+  "directory": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/build",
+  "command": "C:\\msys64\\ucrt64\\bin\\c++.exe -DGLFW_DLL -IC:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections -o CMakeFiles\\Simple3DShooter.dir\\src\\World.cpp.obj -c C:\\Users\\Михаил\\OneDrive\\Документы\\c++\\Simple3DShooter\\Simple3DShooter_fixed\\src\\World.cpp",
+  "file": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src/World.cpp",
+  "output": "C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/build/CMakeFiles/Simple3DShooter.dir/src/World.cpp.obj"
+}
+]

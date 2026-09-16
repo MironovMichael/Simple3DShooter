@@ -87,6 +87,12 @@ struct Enemy
     int id;
 
     Enemy();
+
+    // V25 combat helpers: safe damage, center point and alive-state query.
+    bool isAlive() const;
+    void applyDamage(float damage);
+    Vec3 getCenter() const;
+
 };
 
 class EnemyManager

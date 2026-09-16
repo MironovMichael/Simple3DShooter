@@ -128,4 +128,8 @@ private:
         const WorldObject& object,
         float& distance
     ) const;
+    // V25 world helpers: object statistics, terrain normal and safe placement.
+    Vec3 getGroundNormal(float x, float z) const;
+    bool canPlaceSphere(const Vec3& position, float radius) const;
+
 };

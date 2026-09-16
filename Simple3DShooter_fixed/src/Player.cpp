@@ -734,3 +734,8 @@ bool Player::validSpawnPosition(
 
     return true;
 }
+
+// V25: movement diagnostics and safe velocity controls.
+float Player::getHorizontalSpeed() const { return std::sqrt(velocity.x*velocity.x + velocity.z*velocity.z); }
+void Player::stopHorizontalMotion() { velocity.x = 0.0f; velocity.z = 0.0f; }
+float Player::getStaminaRatio() const { return maxStamina > 0.0f ? std::clamp(stamina / maxStamina, 0.0f, 1.0f) : 0.0f; }

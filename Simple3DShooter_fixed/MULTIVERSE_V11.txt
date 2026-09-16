@@ -8,3 +8,9 @@ Multiverse v11
 - Objects use per-world local coordinates, so they cannot overlap main-world city/settlements/tunnels.
 - Their collision radii are separate from ordinary main-world object hitboxes.
 - Minimap logic remains world-local; main-world portals stay in the main world.
+
+--- V25 QUALITY PASS ---
+1. Документ уточнён для файла «MULTIVERSE V11»: добавлены проверяемые сведения о текущей версии.
+2. Добавлена отдельная секция контроля сборки и совместимости, чтобы старые инструкции не конфликтовали с актуальным проектом.
+3. Добавлены заметки по стабильности, производительности и диагностике ошибок для следующего цикла разработки.
+

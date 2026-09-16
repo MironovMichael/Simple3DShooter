@@ -2323,3 +2323,15 @@ bool EnemyManager::isEnemyPositionSafe(
         radius
     );
 }
+
+
+// V25: robust enemy combat helpers.
+bool Enemy::isAlive() const { return !dead && health > 0.0f; }
+void Enemy::applyDamage(float damage)
+{
+    if (dead) return;
+    health = std::max(0.0f, health - std::max(0.0f, damage));
+    hitFlash = 1.0f;
+    if (health <= 0.0f) { dead = true; state = EnemyState::Dead; deathTimer = 0.0f; }
+}
+Vec3 Enemy::getCenter() const { return Vec3(position.x, position.y + height * 0.5f, position.z); }

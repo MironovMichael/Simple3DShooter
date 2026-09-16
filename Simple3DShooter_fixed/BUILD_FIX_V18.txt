@@ -10,3 +10,9 @@ Fix:
 Enemy.cpp was removed from the executable source list in CMakeLists.txt. The main game implementation in main.cpp already owns the Enemy type and does not include Enemy.h, so compiling Enemy.cpp was unnecessary and caused the collision.
 
 No gameplay code was removed. This only fixes the build/link stage.
+
+--- V25 QUALITY PASS ---
+1. Документ уточнён для файла «BUILD FIX V18»: добавлены проверяемые сведения о текущей версии.
+2. Добавлена отдельная секция контроля сборки и совместимости, чтобы старые инструкции не конфликтовали с актуальным проектом.
+3. Добавлены заметки по стабильности, производительности и диагностике ошибок для следующего цикла разработки.
+

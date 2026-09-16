@@ -8,3 +8,9 @@ Multiverse v12
 - Winter-only objects: pines, radar stations, ice crystals.
 - Minimap now shows destination portals and unique-world objects in the current world.
 - Main-world portal positions were moved to open sectors to avoid city/settlement overlap.
+
+--- V25 QUALITY PASS ---
+1. Документ уточнён для файла «MULTIVERSE V12»: добавлены проверяемые сведения о текущей версии.
+2. Добавлена отдельная секция контроля сборки и совместимости, чтобы старые инструкции не конфликтовали с актуальным проектом.
+3. Добавлены заметки по стабильности, производительности и диагностике ошибок для следующего цикла разработки.
+

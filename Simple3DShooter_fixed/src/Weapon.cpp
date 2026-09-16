@@ -637,3 +637,9 @@ void Weapon::loadCurrentWeapon()
     reserveAmmo =
         stats.ammoReserve;
 }
+
+// V25: ammo and recoil quality helpers.
+int Weapon::getTotalAmmo() const { return magazineAmmo + reserveAmmo; }
+void Weapon::recoverRecoil(float dt) { recoil = std::max(0.0f, recoil - std::max(0.0f,dt) * 5.5f); }
+float Weapon::getAccuracyFactor() const
+{ const WeaponStats& s=currentStats(); return std::clamp(1.0f - s.spread * 3.0f - recoil * 0.02f, 0.05f, 1.0f); }

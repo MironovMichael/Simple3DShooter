@@ -5,3 +5,9 @@ City biome added:
 - Detailed facade/window/crown rendering
 - Conservative per-building AABB collision hitboxes
 - City concept art included in assets/city/
+
+--- V25 QUALITY PASS ---
+1. Документ уточнён для файла «CITY BIOME CHANGES»: добавлены проверяемые сведения о текущей версии.
+2. Добавлена отдельная секция контроля сборки и совместимости, чтобы старые инструкции не конфликтовали с актуальным проектом.
+3. Добавлены заметки по стабильности, производительности и диагностике ошибок для следующего цикла разработки.
+

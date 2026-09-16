@@ -121,4 +121,9 @@ private:
     );
 
     void loadCurrentWeapon();
+    // V25 weapon helpers: total ammo, recoil smoothing and reload safety.
+    int getTotalAmmo() const;
+    void recoverRecoil(float dt);
+    float getAccuracyFactor() const;
+
 };

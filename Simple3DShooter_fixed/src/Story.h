@@ -124,4 +124,9 @@ private:
     void giveMissionReward(
         Mission& mission
     );
+    // V25 narrative helpers: readable progress and safe mission lookup.
+    float getCurrentProgress() const;
+    std::string getCurrentTitle() const;
+    bool isMissionComplete() const;
+
 };

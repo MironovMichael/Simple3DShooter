@@ -1274,3 +1274,12 @@ bool World::rayBoxIntersection(
 
     return true;
 }
+
+// V25: world inspection and placement helpers.
+Vec3 World::getGroundNormal(float x, float z) const
+{
+    const float e=0.5f; const float hx=getGroundHeight(x+e,z)-getGroundHeight(x-e,z); const float hz=getGroundHeight(x,z+e)-getGroundHeight(x,z-e);
+    Vec3 n(-hx/(2.0f*e),1.0f,-hz/(2.0f*e)); const float l=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z); if(l<0.0001f) return Vec3(0,1,0); return n*(1.0f/l);
+}
+bool World::canPlaceSphere(const Vec3& position, float radius) const
+{ return isInsideArena(position,radius) && isPositionFree(position,radius); }

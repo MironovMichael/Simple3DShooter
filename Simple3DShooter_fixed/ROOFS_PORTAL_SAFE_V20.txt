@@ -16,3 +16,9 @@ V20 FIXES
 3. BUILD NOTE
 - The current environment does not provide OpenGL/GLFW development libraries, so full local linking could not be performed here.
 - The source changes are self-contained in src/main.cpp.
+
+--- V25 QUALITY PASS ---
+1. Документ уточнён для файла «ROOFS PORTAL SAFE V20»: добавлены проверяемые сведения о текущей версии.
+2. Добавлена отдельная секция контроля сборки и совместимости, чтобы старые инструкции не конфликтовали с актуальным проектом.
+3. Добавлены заметки по стабильности, производительности и диагностике ошибок для следующего цикла разработки.
+

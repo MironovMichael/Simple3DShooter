@@ -140,4 +140,9 @@ private:
         const Vec3& p,
         World& world
     ) const;
+    // V25 movement helpers: horizontal speed, velocity reset and stamina ratio.
+    float getHorizontalSpeed() const;
+    void stopHorizontalMotion();
+    float getStaminaRatio() const;
+
 };

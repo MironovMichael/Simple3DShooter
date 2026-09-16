@@ -4,3 +4,9 @@ V16 hitbox/enemy rendering fix
 - Rocket ammo pickup radius increased and uses 3D distance.
 - Submarine rocket hitbox split into hull/nose/rear/tower volumes.
 - Humanoid enemies have detailed armor, helmet, visor, limbs, boots, backpack and rifle.
+
+--- V25 QUALITY PASS ---
+1. Документ уточнён для файла «HITBOX FIX V16»: добавлены проверяемые сведения о текущей версии.
+2. Добавлена отдельная секция контроля сборки и совместимости, чтобы старые инструкции не конфликтовали с актуальным проектом.
+3. Добавлены заметки по стабильности, производительности и диагностике ошибок для следующего цикла разработки.
+

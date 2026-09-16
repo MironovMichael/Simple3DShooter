@@ -8,3 +8,9 @@ Multiverse v9
 - Enemies are tagged by world; main-world enemies do not appear in destination worlds.
 - Ocean and winter worlds seed their own hostile populations on first visit.
 - Existing city, settlements, tunnels and tunnel drones remain in the main world.
+
+--- V25 QUALITY PASS ---
+1. Документ уточнён для файла «MULTIVERSE V9»: добавлены проверяемые сведения о текущей версии.
+2. Добавлена отдельная секция контроля сборки и совместимости, чтобы старые инструкции не конфликтовали с актуальным проектом.
+3. Добавлены заметки по стабильности, производительности и диагностике ошибок для следующего цикла разработки.
+

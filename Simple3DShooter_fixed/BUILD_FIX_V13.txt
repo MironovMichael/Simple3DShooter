@@ -7,3 +7,9 @@ Added forward declarations for world enemy variant functions.
 Moved updateOtherWorldEnemyBehavior(e, dt) into updateEnemies().
 Removed invalid e/dt use from drawEnemyProjectiles().
 Local syntax check with g++ C++17, -Wall -Wextra -Wpedantic: PASS.
+
+--- V25 QUALITY PASS ---
+1. Документ уточнён для файла «BUILD FIX V13»: добавлены проверяемые сведения о текущей версии.
+2. Добавлена отдельная секция контроля сборки и совместимости, чтобы старые инструкции не конфликтовали с актуальным проектом.
+3. Добавлены заметки по стабильности, производительности и диагностике ошибок для следующего цикла разработки.
+

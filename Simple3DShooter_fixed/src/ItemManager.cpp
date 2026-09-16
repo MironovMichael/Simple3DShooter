@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "ItemManager.h"
 
 #include "Player.h"
@@ -459,3 +460,17 @@ bool ItemManager::canSpawnAt(
 
     return true;
 }
+
+// V25: inventory queries used by HUD/debugging and future smart pickup logic.
+int ItemManager::getActiveCount() const
+{
+    int count = 0; for (const auto& item : items) if (item.isActive()) ++count; return count;
+}
+const Item* ItemManager::findNearest(const Vec3& position, float maxDistance) const
+{
+    const Item* best = nullptr; float bestSq = maxDistance * maxDistance;
+    for (const auto& item : items) if (item.isActive()) { const Vec3 p=item.getPosition(); const float dx=p.x-position.x,dz=p.z-position.z; const float sq=dx*dx+dz*dz; if(sq<=bestSq){bestSq=sq;best=&item;} }
+    return best;
+}
+void ItemManager::removeInactive()
+{ items.erase(std::remove_if(items.begin(),items.end(),[](const Item& i){return !i.isActive();}),items.end()); }

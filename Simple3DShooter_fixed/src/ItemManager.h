@@ -70,4 +70,9 @@ private:
         const Vec3& position,
         World& world
     ) const;
+    // V25 inventory helpers: active count, nearest pickup and stale-item cleanup.
+    int getActiveCount() const;
+    const Item* findNearest(const Vec3& position, float maxDistance) const;
+    void removeInactive();
+
 };

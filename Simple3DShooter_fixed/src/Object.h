@@ -86,6 +86,11 @@ struct GameObject
             active = false;
         }
     }
+    // V25 object helpers: safe damage, top surface and distance query.
+    bool applyDamage(float damage);
+    float getTopY() const;
+    float distanceXZ(const Vec3& point) const;
+
 };
 GameObject createObject(
     ObjectType type,

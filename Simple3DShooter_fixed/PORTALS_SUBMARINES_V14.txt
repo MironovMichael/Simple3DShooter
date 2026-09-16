@@ -9,3 +9,9 @@ Multiverse v14
 - Heavy rockets have a larger hit radius and do not collide with main-world objects/tunnel shells.
 - Submarines and their markers are only active/rendered in the ocean world.
 - Source files passed C++17 syntax checks with -Wall -Wextra -Wpedantic using a local GLFW/OpenGL stub.
+
+--- V25 QUALITY PASS ---
+1. Документ уточнён для файла «PORTALS SUBMARINES V14»: добавлены проверяемые сведения о текущей версии.
+2. Добавлена отдельная секция контроля сборки и совместимости, чтобы старые инструкции не конфликтовали с актуальным проектом.
+3. Добавлены заметки по стабильности, производительности и диагностике ошибок для следующего цикла разработки.
+

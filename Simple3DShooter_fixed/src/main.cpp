@@ -44,6 +44,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cctype>
 
@@ -350,22 +351,21 @@ struct StoryBeat {
 };
 
 static const StoryBeat g_storyBeats[] = {
-    {"ОПЕРАЦИЯ «РАЗЛОМ»: ПОГРАНИЧНЫЕ ВОРОТА ВЫШЛИ ИЗ СТРОЯ.", "Зачистите зону высадки и переживите первую атаку.", WORLD_MAIN},
-    {"КОМАНДОВАНИЕ: РАЗВЕДКА ОБНАРУЖИЛА ТРИ СИГНАЛА ПОД ЗЕМЛЁЙ.", "Уничтожьте 10 противников и найдите путь в подземелье.", WORLD_MAIN},
-    {"АРХИВ: ТУННЕЛИ ПОСТРОЕНЫ ВОКРУГ НЕИЗВЕСТНОГО ЭНЕРГЕТИЧЕСКОГО ЯДРА.", "Пройдите через сеть туннелей и удерживайте маршрут открытым.", WORLD_MAIN},
-    {"ВНИМАНИЕ: БРОНИРОВАННЫЕ ЧАСТИ ДВИЖУТСЯ К ГОРОДУ.", "Уничтожьте 5 тяжёлых машин, прежде чем они достигнут города.", WORLD_MAIN},
-    {"КОМАНДОВАНИЕ: НА ВОСТОЧНОЙ ГРАНИЦЕ ОТКРЫЛСЯ РАЗЛОМ.", "Найдите действующий портал в морской мир.", WORLD_MAIN},
-    {"МОРСКОЙ ЖУРНАЛ: НЕБЕСНЫЕ СУБМАРИНЫ ОХРАНЯЮТ ПРОПАВШИЙ КОНВОЙ.", "Переживите атаку в морском мире и уничтожьте вражеские машины.", WORLD_OCEAN},
-    {"МОРСКОЙ АРХИВ: КОНВОЙ ПЕРЕВОЗИЛ ВТОРОЙ КЛЮЧ РАЗЛОМА.", "Соберите припасы и сбивайте вражеские ракеты.", WORLD_OCEAN},
-    {"СИГНАЛ: ИЗ ПОЛЯРНОГО МИРА ИДЁТ НЕИЗВЕСТНАЯ ПЕРЕДАЧА.", "Вернитесь через безопасный портал и следуйте за полярным сигналом.", WORLD_OCEAN},
-    {"ЗИМНИЙ ЖУРНАЛ: СИГНАЛ ИДЁТ ОТ АВТОМАТИЧЕСКОГО АВАРИЙНОГО МАЯКА.", "Пересеките снежное поле и захватите ретрансляционную станцию.", WORLD_WINTER},
-    {"АВАРИЙНЫЙ МАЯК: ЯДРО — НЕ ОРУЖИЕ. ЭТО ЗАМОК.", "Удерживайте ретранслятор, пока враг получает подкрепление.", WORLD_WINTER},
-    {"КОМАНДОВАНИЕ: СИГНАЛЫ ТРЁХ МИРОВ СИНХРОНИЗИРОВАНЫ.", "Вернитесь на границу и подготовьтесь к финальному прорыву.", WORLD_WINTER},
-    {"ФИНАЛЬНЫЙ ПРОТОКОЛ: РАЗЛОМ ОТКРЫВАЕТСЯ. ВСЕ ВРАЖЕСКИЕ СИЛЫ ПРИВЕДЕНЫ В ДВИЖЕНИЕ.", "Переживите финальную атаку и уничтожьте оставшихся противников.", WORLD_MAIN},
-    {"ФИНАЛЬНАЯ ПЕРЕДАЧА: ЯДРО МОЖЕТ ЗАКРЫТЬ РАЗЛОМ, НО ТОЛЬКО ОДИН РАЗ.", "Доберитесь до центральной командной зоны.", WORLD_MAIN},
-    {"КОМАНДОВАНИЕ: КЛЮЧ ЯДРА ПОЛУЧЕН. ПРИКРЫВАЙТЕ ГРУППУ ЭВАКУАЦИИ.", "Удерживайте командную зону до завершения эвакуации.", WORLD_MAIN},
-    {"ЭВАКУАЦИЯ: РАЗЛОМ РУХНЕТ. ПРОДОЛЖАЙТЕ БОЙ.", "Завершите операцию, достигнув периметра эвакуации.", WORLD_MAIN},
-    {"ЭПИЛОГ: ПОГРАНИЧНЫЕ СТАНЦИИ СНОВА ПОЛУЧАЮТ ЧИСТЫЙ СИГНАЛ.", "Операция «Разлом» завершена. Продолжайте кампанию или исследуйте мир.", WORLD_MAIN}
+    {"ОПЕРАЦИЯ РАЗЛОМ. ПОГРАНИЧНЫЙ ГАРНИЗОН ПОТЕРЯН. ВЫ ВЫСАЖИВАЕТЕСЬ НА ЗЕМЛЕ.", "Зачистите зону высадки и удерживайте периметр.", WORLD_MAIN},
+    {"РАЗВЕДКА: ПОД ЗЕМЛЕЙ ОБНАРУЖЕНЫ ТРИ ЭНЕРГЕТИЧЕСКИХ СИГНАЛА.", "Уничтожьте 10 противников и найдите вход в подземную сеть.", WORLD_MAIN},
+    {"АРХИВ: СТАРЫЕ ТОННЕЛИ ОКРУЖАЮТ НЕИЗВЕСТНОЕ ЯДРО РАЗЛОМА.", "Пройдите тоннели и восстановите питание первого узла.", WORLD_MAIN},
+    {"БРОНИРОВАННАЯ КОЛОННА ВРАГА ИДЕТ К ГОРОДУ. ЕЕ МАШИНЫ НЕСУТ МЕТКИ РАЗЛОМА.", "Уничтожьте 5 танков и остановите колонну.", WORLD_MAIN},
+    {"ВОСТОЧНЫЙ ПОРТАЛ СТАБИЛИЗИРОВАН. ЗА НИМ ОБНАРУЖЕН НЕИЗВЕСТНЫЙ МОРСКОЙ МИР.", "Доберитесь до портала и перейдите в морской мир.", WORLD_MAIN},
+    {"МОРСКОЙ МИР: НЕБО ПАТРУЛИРУЮТ ГИГАНТСКИЕ СУБМАРИНЫ. ВРАГ ГОТОВИТ РАКЕТНЫЙ УДАР.", "Найдите боеприпасы и уничтожьте вражеские субмарины.", WORLD_OCEAN},
+    {"ПЕРЕХВАТ: ВРАЖЕСКИЕ РАКЕТЫ МОЖНО СБИВАТЬ ОГНЕМ. НЕ ДАЙТЕ ИМ ДОСТИЧЬ ЦЕЛИ.", "Сбейте 6 вражеских ракет.", WORLD_OCEAN},
+    {"ЗИМНИЙ ПОРТАЛ ОТКРЫТ. СИГНАЛ ЯДРА ПЕРЕШЕЛ В СНЕЖНЫЙ МИР.", "Перейдите в зимний мир и найдите северный маяк.", WORLD_WINTER},
+    {"СЕВЕРНЫЙ МАЯК: СИГНАЛ ПЕРЕДАЕТ КООРДИНАТЫ СТАРОГО УЗЛА.", "Доберитесь до маяка и восстановите связь.", WORLD_WINTER},
+    {"РАЗЛОМ РАСТЕТ. ТРИ МИРА НАЧАЛИ СИНХРОНИЗИРОВАТЬСЯ.", "Вернитесь на Землю через обратный портал.", WORLD_MAIN},
+    {"КОМАНДОВАНИЕ: ВРАГ СОБИРАЕТ УДАРНУЮ ГРУППУ У ЦЕНТРАЛЬНОГО УЗЛА.", "Уничтожьте ударную группу и защитите узел.", WORLD_MAIN},
+    {"ЯДРО ОТКЛИКАЕТСЯ НА ВАШЕ СНАРЯЖЕНИЕ. ПРОТОКОЛ ЗАКРЫТИЯ ГОТОВ.", "Доберитесь до ядра и активируйте протокол.", WORLD_MAIN},
+    {"ПРОТОКОЛ ЗАПУЩЕН. ПОЛЕ РАЗЛОМА СЖИМАЕТСЯ, НО ВРАГ ПРОРЫВАЕТ ПЕРИМЕТР.", "Удерживайте командную зону до конца эвакуации.", WORLD_MAIN},
+    {"ЭВАКУАЦИЯ: СВЯЗЬ ВОССТАНОВЛЕНА. РАЗЛОМ НАЧИНАЕТ ЗАКРЫВАТЬСЯ.", "Достигните периметра эвакуации.", WORLD_MAIN},
+    {"ЭПИЛОГ: ЗЕМЛЯ СНОВА ПОЛУЧАЕТ ЧИСТЫЙ СИГНАЛ. НО ОДИН МАЯК ВСЕ ЕЩЕ МИГАЕТ.", "Операция завершена. Исследуйте мир и найдите следы Разлома.", WORLD_MAIN}
 };
 
 static constexpr int STORY_BEAT_COUNT = sizeof(g_storyBeats) / sizeof(g_storyBeats[0]);
@@ -1065,12 +1065,33 @@ static float terrainPattern(float x, float z)
     return clampf(0.50f * coarse + 0.33f * medium + 0.17f * fine, 0.0f, 1.0f);
 }
 
+static std::array<float,3> terrainSurfaceNormal(float x, float z)
+{
+    const float e = 1.25f;
+    const float hx = terrainHeight(x + e, z) - terrainHeight(x - e, z);
+    const float hz = terrainHeight(x, z + e) - terrainHeight(x, z - e);
+    std::array<float,3> n{{-hx / (2.0f * e), 1.0f, -hz / (2.0f * e)}};
+    const float len = sqrtf(n[0]*n[0] + n[1]*n[1] + n[2]*n[2]);
+    if (len > 0.0001f) { n[0]/=len; n[1]/=len; n[2]/=len; }
+    return n;
+}
+
+static float terrainMoisture(float x, float z)
+{
+    const float low = valueNoise(x * 0.021f - 37.0f, z * 0.021f + 19.0f);
+    const float detail = valueNoise(x * 0.075f + 61.0f, z * 0.075f - 13.0f);
+    return clampf(0.68f * low + 0.32f * detail, 0.0f, 1.0f);
+}
+
 static void terrainBaseColor(float x, float z, float avgHeight, float& r, float& g, float& b)
 {
     const int biome = biomeAt(x, z);
     const float p = terrainPattern(x, z);
     const float streak = 0.5f + 0.5f * sinf(x * 0.13f + sinf(z * 0.035f) * 2.4f);
-    const float detail = clampf(0.86f + p * 0.24f + streak * 0.06f, 0.76f, 1.18f);
+    const float moisture = terrainMoisture(x, z);
+    const auto n = terrainSurfaceNormal(x, z);
+    const float slope = 1.0f - clampf(n[1], 0.0f, 1.0f);
+    const float detail = clampf(0.72f + p * 0.34f + streak * 0.12f + moisture * 0.08f, 0.62f, 1.28f);
 
     switch (biome)
     {
@@ -1081,7 +1102,7 @@ static void terrainBaseColor(float x, float z, float avgHeight, float& r, float&
             r=0.78f; g=0.84f; b=0.90f;
             break;
         case 1: // meadow
-            r=0.20f; g=0.42f; b=0.12f;
+            r=0.15f + moisture*0.045f; g=0.30f + moisture*0.11f; b=0.075f + p*0.035f;
             break;
         case 2: // jungle
             r=0.08f; g=0.34f; b=0.10f;
@@ -1101,8 +1122,8 @@ static void terrainBaseColor(float x, float z, float avgHeight, float& r, float&
         case 7: // city
             r=0.17f; g=0.19f; b=0.21f;
             break;
-        default: // mixed grassland
-            r=0.23f; g=0.44f; b=0.15f;
+        default: // mixed grassland / soil
+            r=0.17f + p*0.045f; g=0.33f + moisture*0.10f; b=0.095f + p*0.025f;
             break;
     }
 
@@ -1119,6 +1140,15 @@ static void terrainBaseColor(float x, float z, float avgHeight, float& r, float&
         b = 0.56f + b * 0.32f;
     }
 
+    // Exposed slopes become rockier and dry soil becomes warmer. This breaks up
+    // the old uniform green sheet while keeping the biome palette readable.
+    if (slope > 0.22f && biome != 8 && biome != 9)
+    {
+        const float rock = clampf((slope - 0.22f) * 1.9f, 0.0f, 0.72f);
+        r = r*(1.0f-rock) + 0.31f*rock;
+        g = g*(1.0f-rock) + 0.28f*rock;
+        b = b*(1.0f-rock) + 0.23f*rock;
+    }
     r *= detail;
     g *= detail;
     b *= detail;
@@ -1147,10 +1177,10 @@ static void generateDecor()
     if (g_world != WORLD_MAIN)
         return;
     // 10-unit cells: dense enough to look populated, sparse enough to render fast.
-    const float cell = 10.0f;
+    const float cell = 8.0f;
     const int minC = static_cast<int>(floorf((-ARENA+cell)*0.5f/cell));
     const int maxC = static_cast<int>(ceilf((ARENA-cell)*0.5f/cell));
-    g_decor.reserve(18000);
+    g_decor.reserve(32000);
 
     for (int iz=minC; iz<=maxC; ++iz)
     {
@@ -1185,7 +1215,7 @@ static void generateDecor()
             // Extra small blades/clumps around the primary decor in fertile biomes.
             if (type==DECOR_GRASS || type==DECOR_FLOWER)
             {
-                for (int k=0;k<3;++k)
+                for (int k=0;k<5;++k)
                 {
                     const float ox=(hash01(ix*3+k,iz,81u)-0.5f)*cell*0.9f;
                     const float oz=(hash01(ix,iz*3+k,87u)-0.5f)*cell*0.9f;
@@ -1334,30 +1364,6 @@ static bool playerCollidesWithObject(
     return pointInsideBox(x, z, o, radius);
 }
 
-static bool tunnelConflictsObject(const WorldObject& o)
-{
-    if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT)
-        return false;
-
-    const float hx = o.sx * 0.5f + 1.0f;
-    const float hz = o.sz * 0.5f + 1.0f;
-    const float samples[][2] = {
-        {o.x, o.z},
-        {o.x-hx, o.z-hz}, {o.x+hx, o.z-hz},
-        {o.x-hx, o.z+hz}, {o.x+hx, o.z+hz},
-        {o.x-hx, o.z}, {o.x+hx, o.z},
-        {o.x, o.z-hz}, {o.x, o.z+hz}
-    };
-    for (const auto& p : samples)
-    {
-        // Surface objects only conflict with the entrance cut/opening.
-        // Objects above a buried section are allowed to remain on the surface.
-        if (isTunnelEntranceCarvedZone(p[0], p[1]))
-            return true;
-    }
-    return false;
-}
-
 static float playerFloorHeight(float x, float z)
 {
     float floor = currentFloorHeight(x,z);
@@ -1366,7 +1372,7 @@ static float playerFloorHeight(float x, float z)
     {
         if (!o.active || o.world != g_world) continue;
         if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT) continue;
-        if (underground && tunnelConflictsObject(o)) continue;
+        if (underground && o.type == OBJECT_HOUSE_ROOF) continue;
         if (!pointInsideBox(x,z,o,PLAYER_RADIUS*0.35f)) continue;
         const float top=o.y+o.sy*0.5f;
         if(top>floor+0.03f && top-floor<=PLAYER_STEP_HEIGHT)
@@ -1385,7 +1391,6 @@ static bool playerInsideStepableObstacle(float x, float z)
     {
         if (!o.active || o.world != g_world) continue;
         if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT) continue;
-        if (g_inTunnel && tunnelConflictsObject(o)) continue;
         if (!playerCollidesWithObject(x,z,o,PLAYER_RADIUS)) continue;
         const float top=o.y+o.sy*0.5f;
         if (o.type == OBJECT_TREE) continue;
@@ -1423,7 +1428,6 @@ static bool playerBlocked(float x, float z)
     {
         if (!o.active || o.world != g_world) continue;
         if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT) continue;
-        if (g_inTunnel && tunnelConflictsObject(o)) continue;
         if (playerCollidesWithObject(x, z, o, PLAYER_RADIUS))
         {
             const float top=o.y+o.sy*0.5f;
@@ -1447,9 +1451,7 @@ static bool enemyBlocked(float x, float z, float radius)
         if (!o.active || o.world != g_world)
             continue;
 
-        if (o.type == OBJECT_AMMO ||
-            o.type == OBJECT_ROCKET_AMMO ||
-            o.type == OBJECT_MEDKIT)
+        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT)
             continue;
 
         if (pointInsideBox(x, z, o, radius))
@@ -1725,75 +1727,61 @@ static void drawBuildingWall(const WorldObject& o)
     glPopMatrix();
 }
 
+static void drawGableRoofMesh(float x, float y, float z, float w, float d, float h, float yaw)
+{
+    const float c=cosf(yaw), si=sinf(yaw);
+    auto V=[&](float lx,float ly,float lz){
+        return std::array<float,3>{x+lx*c-lz*si,y+ly,z+lx*si+lz*c};
+    };
+    const float hw=w*0.5f, hd=d*0.5f;
+    auto a=V(-hw,0,-hd), b=V(hw,0,-hd), c0=V(hw,0,hd), d0=V(-hw,0,hd);
+    auto r0=V(0,h,-hd), r1=V(0,h,hd);
+    glBegin(GL_TRIANGLES);
+    glColor3f(0.24f,0.10f,0.055f); glVertex3fv(a.data()); glVertex3fv(b.data()); glVertex3fv(r0.data());
+    glColor3f(0.30f,0.14f,0.075f); glVertex3fv(d0.data()); glVertex3fv(r1.data()); glVertex3fv(c0.data());
+    glColor3f(0.18f,0.07f,0.04f); glVertex3fv(a.data()); glVertex3fv(d0.data()); glVertex3fv(r1.data()); glVertex3fv(r0.data());
+    glColor3f(0.20f,0.085f,0.045f); glVertex3fv(b.data()); glVertex3fv(r0.data()); glVertex3fv(r1.data()); glVertex3fv(c0.data());
+    glEnd();
+    glBegin(GL_QUADS);
+    glColor3f(0.16f,0.065f,0.035f); glVertex3fv(a.data()); glVertex3fv(b.data()); glVertex3fv(c0.data()); glVertex3fv(d0.data());
+    glEnd();
+}
+
 static void drawHouseRoof(float x, float y, float z, float w, float d, float yaw)
 {
-    // The roof is deliberately drawn above the wall top.  It uses two
-    // sloped slabs plus a ridge instead of a buried flat box, so it remains
-    // clearly visible even on uneven terrain.
-    const float roofW = w + 1.15f;
-    const float roofD = d + 1.05f;
-    const float halfW = roofW * 0.5f;
-    const float slope = 24.0f;
-    const float rise = halfW * sinf(slope * (float)M_PI / 180.0f);
-
-    glPushMatrix();
-    glTranslatef(x, y + 0.30f, z);
-    glRotatef(yaw * 57.2958f, 0.0f, 1.0f, 0.0f);
-    glRotatef(slope, 0.0f, 0.0f, 1.0f);
-    drawBox(-halfW * 0.25f, 0.0f, 0.0f, halfW * 0.52f, 0.48f, roofD,
-            0.24f, 0.12f, 0.08f);
+    // Solid, conventional gable roof: a real triangular prism rather than
+    // rotated cuboids, so the roof can never appear upside-down.
+    drawGableRoofMesh(x, y, z, w+1.8f, d+1.4f, 2.7f, yaw);
+    const float c=cosf(yaw), si=sinf(yaw);
+    const float rx=x, rz=z;
+    glPushMatrix(); glTranslatef(rx, y+2.55f, rz); glRotatef(yaw*57.2958f,0,1,0);
+    drawBox(0,0,0,0.35f,0.35f,d+1.55f,0.13f,0.055f,0.025f);
     glPopMatrix();
-
-    glPushMatrix();
-    glTranslatef(x, y + 0.30f, z);
-    glRotatef(yaw * 57.2958f, 0.0f, 1.0f, 0.0f);
-    glRotatef(-slope, 0.0f, 0.0f, 1.0f);
-    drawBox(halfW * 0.25f, 0.0f, 0.0f, halfW * 0.52f, 0.48f, roofD,
-            0.24f, 0.12f, 0.08f);
-    glPopMatrix();
-
-    // Raised ridge makes the roof silhouette unmistakable from a distance.
-    glPushMatrix();
-    glTranslatef(x, y + 0.48f + rise, z);
-    glRotatef(yaw * 57.2958f, 0.0f, 1.0f, 0.0f);
-    drawBox(0, 0, 0, 0.72f, 0.34f, roofD + 0.12f,
-            0.30f, 0.16f, 0.10f);
-    glPopMatrix();
+    (void)c; (void)si;
 }
 
 static void addHouse(float cx, float cz, float rotation = 0.0f)
 {
-    // Collision-friendly rectangular house with a real doorway opening.
-    // The opening is deliberately wide enough for the player and enemies.
-    const float W = 13.0f;
-    const float D = 10.0f;
-    const float H = 5.5f;
-    const float T = 0.65f;
-    const float DOOR = 3.0f;
-    const float side = (W - DOOR) * 0.5f;
-    const float c = cosf(rotation), si = sinf(rotation);
-
-    auto addPart = [&](float lx, float lz, float sx, float sy, float sz)
-    {
-        const float x = cx + lx*c - lz*si;
-        const float z = cz + lx*si + lz*c;
-        g_objects.push_back({OBJECT_BUILDING, x, sy*0.5f, z, sx, sy, sz, true, WORLD_MAIN, rotation});
+    // New house design: two-storey masonry shell, broad porch, framed windows,
+    // and a real gable roof. Collision is split into wall sections around the door.
+    const float W=15.0f, D=12.0f, H=6.8f, T=0.70f, DOOR=3.2f;
+    const float side=(W-DOOR)*0.5f;
+    const float c=cosf(rotation), si=sinf(rotation);
+    auto addPart=[&](float lx,float lz,float sx,float sy,float sz){
+        const float x=cx+lx*c-lz*si, z=cz+lx*si+lz*c;
+        g_objects.push_back({OBJECT_BUILDING,x,sy*0.5f,z,sx,sy,sz,true,WORLD_MAIN,rotation});
     };
-
-    // Front wall, split around the doorway.
-    addPart(-(DOOR*0.5f + side*0.5f), -D*0.5f, side, H, T);
-    addPart( +(DOOR*0.5f + side*0.5f), -D*0.5f, side, H, T);
-    // Back and side walls.
-    addPart(0.0f, D*0.5f, W, H, T);
-    addPart(-W*0.5f, 0.0f, T, H, D);
-    addPart( W*0.5f, 0.0f, T, H, D);
-    // Dedicated roof: the old generic addPart() placed this at sy*0.5,
-    // burying it at ground level.
-    g_objects.push_back({OBJECT_HOUSE_ROOF, cx, H + 0.22f, cz,
-                         W + 0.35f, 0.45f, D + 0.35f, true, WORLD_MAIN, rotation});
-
-    // Door lintel above the entrance.
-    addPart(0.0f, -D*0.5f, DOOR, 1.4f, T);
+    addPart(-(DOOR*0.5f+side*0.5f),-D*0.5f,side,H,T);
+    addPart( +(DOOR*0.5f+side*0.5f),-D*0.5f,side,H,T);
+    addPart(0,D*0.5f,W,H,T);
+    addPart(-W*0.5f,0,T,H,D); addPart(W*0.5f,0,T,H,D);
+    // Foundation and porch.
+    addPart(0,0,W+0.8f,0.65f,D+0.8f);
+    addPart(0,-D*0.5f-1.0f,4.8f,0.55f,2.1f);
+    // Door lintel.
+    addPart(0,-D*0.5f,DOOR,1.5f,T);
+    // Roof collision volume is conservative and positioned at the actual roof base.
+    g_objects.push_back({OBJECT_HOUSE_ROOF,cx,H+0.35f,cz,W+1.8f,5.4f,D+1.4f,true,WORLD_MAIN,rotation});
 }
 
 // ============================================================
@@ -2035,7 +2023,7 @@ static void respawnPlayer()
     g_deadTimer = 0.0f;
     g_damageFlash = 0.0f;
     g_firstMouse = true;
-    g_message = "RESPAWNED - KEEP FIGHTING";
+    g_message = "ВОЗРОЖДЕНИЕ - ПРОДОЛЖАЙТЕ БОЙ.";
 }
 
 static void damagePlayer(float damage)
@@ -2052,7 +2040,7 @@ static void damagePlayer(float damage)
         g_vy = 0.0f;
         g_onGround = true;
         g_deadTimer = 3.0f;
-        g_message = "YOU DIED - RESPAWNING...";
+        g_message = "ВЫ ПОГИБЛИ - ВОЗРОЖДЕНИЕ...";
     }
 }
 
@@ -2099,7 +2087,7 @@ static void reloadWeapon()
     w.reloadTimer =
         w.reloadTime;
 
-    g_message = "RELOADING...";
+    g_message = "ПЕРЕЗАРЯДКА...";
 }
 
 // ============================================================
@@ -2131,7 +2119,7 @@ static void updateReload(float dt)
 
         w.reserve -= take;
 
-        g_message = "READY";
+        g_message = "ГОТОВ.";
     }
 }
 
@@ -2168,10 +2156,10 @@ static void shoot()
 
     if (g_currentWeapon == WEAPON_ROCKET)
     {
-        if (g_world != WORLD_OCEAN) { g_currentWeapon=WEAPON_PISTOL; g_message="ROCKET LAUNCHER IS ONLY AVAILABLE IN THE OCEAN WORLD"; return; }
+        if (g_world != WORLD_OCEAN) { g_currentWeapon=WEAPON_PISTOL; g_message="РАКЕТНИЦА ДОСТУПНА ТОЛЬКО В МОРСКОМ МИРЕ."; return; }
         if (w.cooldown > 0.0f) return;
         if (w.ammo <= 0) { reloadWeapon(); return; }
-        w.ammo--; w.cooldown=w.fireDelay; g_weaponRecoil=w.recoil; g_muzzleFlash=1.0f; spawnPlayerRocket(); g_message="ROCKET FIRED"; return;
+        w.ammo--; w.cooldown=w.fireDelay; g_weaponRecoil=w.recoil; g_muzzleFlash=1.0f; spawnPlayerRocket(); g_message="РАКЕТА ЗАПУЩЕНА."; return;
     }
 
     if (w.cooldown > 0.0f)
@@ -2353,7 +2341,7 @@ static void shoot()
                     rp.active = false;
                     spawnExplosion(rp.x,rp.y,rp.z,4.5f,0.0f,false,false);
                     g_hitMarker = 1.0f;
-                    g_message = "ENEMY ROCKET DESTROYED!";
+                    g_message = "ВРАЖЕСКАЯ РАКЕТА СБИТА!";
                 }
             }
             continue;
@@ -2369,7 +2357,7 @@ static void shoot()
             e.hitFlash = 1.0f;
             g_hitMarker = 1.0f;
             if (bestHeadshot)
-                g_message = "HEADSHOT!";
+                g_message = "ПОПАДАНИЕ В ГОЛОВУ!";
 
             if (e.hp <= 0.0f)
             {
@@ -2627,24 +2615,13 @@ static void createWorld()
     for (const auto& t : farTrees)
         g_objects.push_back({OBJECT_TREE, t[0] * WORLD_SCALE, 2.0f, t[1] * WORLD_SCALE, 2.5f, 4.0f, 2.5f, true});
 
-    // Remove surface obstacles that would occupy the tunnel bore.
-    // This guarantees the tunnel and its physics never intersect with old
-    // world props such as crates, rocks or trees.
-    for (auto& o : g_objects)
-    {
-        if (o.type == OBJECT_SOLID || o.type == OBJECT_TREE)
-        {
-            if (tunnelConflictsObject(o))
-                o.active = false;
-        }
-    }
-
-    // Snap surviving world objects to the actual terrain surface.  Roofs are
-    // special: their Y is the top of the house, not the normal ground center.
+    // Snap surviving world objects to the actual terrain surface. Roofs are
+    // special: their Y is the base of the roof, not the normal ground center.
     for (auto& o : g_objects)
     {
         const bool wall = fabsf(o.x) > ARENA - 0.01f || fabsf(o.z) > ARENA - 0.01f;
-        if (!wall && o.active)
+        if (!wall && o.active &&
+            true)
         {
             const float support = isTunnelZone(o.x,o.z)
                 ? tunnelFloorHeight(o.x,o.z)
@@ -2904,15 +2881,15 @@ static void setJetpack(bool enabled)
 {
     if (enabled && g_jetpackFuel <= 0.5f)
     {
-        g_message = "JETPACK: NO FUEL";
+        g_message = "ДЖЕТПАК: НЕТ ТОПЛИВА.";
         g_jetpackEnabled = false;
         return;
     }
     g_jetpackEnabled = enabled;
     if (enabled)
-        g_message = "JETPACK ONLINE - SPACE TO THRUST";
+        g_message = "ДЖЕТПАК ВКЛЮЧЁН - ПРОБЕЛ: ТЯГА.";
     else
-        g_message = "JETPACK OFFLINE";
+        g_message = "ДЖЕТПАК ВЫКЛЮЧЕН.";
 }
 
 static void updateJetpack(float dt)
@@ -2930,7 +2907,7 @@ static void updateJetpack(float dt)
             if (g_jetpackFuel <= 0.0f)
             {
                 g_jetpackEnabled = false;
-                g_message = "JETPACK EMPTY - LAND TO RECHARGE";
+                g_message = "ДЖЕТПАК ПУСТ - СЯДЬТЕ ДЛЯ ЗАРЯДКИ.";
             }
         }
         else
@@ -2965,6 +2942,13 @@ static void drawJetpackFlames()
 
 static void updatePlayer(float dt)
 {
+    if (!std::isfinite(g_px) || !std::isfinite(g_py) || !std::isfinite(g_pz) ||
+        !std::isfinite(g_vy) || !std::isfinite(g_yaw) || !std::isfinite(g_pitch))
+    {
+        g_px=0.0f; g_pz=0.0f; g_py=terrainHeight(0.0f,0.0f); g_vy=0.0f; g_yaw=0.0f; g_pitch=0.0f; g_onGround=true;
+        g_message="ОШИБКА ПОЗИЦИИ ИСПРАВЛЕНА. ИГРА ПРОДОЛЖЕНА.";
+    }
+    if (dt > 0.05f) dt = 0.05f;
     if (g_deadTimer > 0.0f)
         return;
 
@@ -3208,7 +3192,7 @@ static void spawnExplosion(float x,float y,float z,float radius,float damage,boo
             if(!sub.active) continue;
             const float d=sqrtf((sub.x-x)*(sub.x-x)+(sub.y-y)*(sub.y-y)+(sub.z-z)*(sub.z-z));
             const float hitR=radius+15.0f;
-            if(d<=hitR){ const float f=clampf(1.0f-d/std::max(hitR,0.01f),0.25f,1.0f); sub.hp-=damage*f; if(sub.hp<=0.0f){sub.hp=0.0f;sub.active=false;g_score+=1200;g_kills++;g_message="SUBMARINE DESTROYED!";} }
+            if(d<=hitR){ const float f=clampf(1.0f-d/std::max(hitR,0.01f),0.25f,1.0f); sub.hp-=damage*f; if(sub.hp<=0.0f){sub.hp=0.0f;sub.active=false;g_score+=1200;g_kills++;g_message="СУБМАРИН УНИЧТОЖЕН!";} }
         }
     }
     if(hurtSubs)
@@ -3339,7 +3323,7 @@ static void updateEnemyProjectiles(float dt)
                     p.active=false;
                     hitSub=true;
                     g_hitMarker=1.0f;
-                    g_message="SUBMARINE HIT!";
+                    g_message="ПОПАДАНИЕ ПО СУБМАРИНЕ!";
                     break;
                 }
             }
@@ -3632,7 +3616,7 @@ static void updatePickups()
         if (o.type == OBJECT_ROCKET_AMMO)
         {
             g_weapons[WEAPON_ROCKET].reserve += 3;
-            g_message = "ROCKET AMMO +3";
+            g_message = "РАКЕТНЫЕ БОЕПРИПАСЫ +3";
             o.active = false;
         }
         else if (o.type == OBJECT_AMMO)
@@ -3837,7 +3821,7 @@ static void updateGame(float dt)
     if (g_storyTimer <= 0.0f && g_storyStage < STORY_BEAT_COUNT)
     {
         const StoryBeat& beat = g_storyBeats[g_storyStage];
-        g_message = beat.transmission;
+        g_message = std::string(beat.transmission) + "   |  ЦЕЛЬ: " + beat.objective;
         g_storyObjective = g_storyStage;
         g_storyStage++;
         g_storyTimer = (g_storyStage >= STORY_BEAT_COUNT) ? 9999.0f : 20.0f;
@@ -4386,9 +4370,18 @@ static void drawDecor()
         {
             case DECOR_GRASS:
                 glBegin(GL_TRIANGLES);
-                glColor3f(0.10f,0.48f,0.08f); glVertex3f(-0.04f,0,0); glVertex3f(0.0f,s*0.95f,0); glVertex3f(0.05f,0,0);
-                glColor3f(0.14f,0.62f,0.10f); glVertex3f(0,0,-0.05f); glVertex3f(0.02f,s,0); glVertex3f(0.07f,0,0.05f);
+                for(int k=0;k<9;++k){
+                    const float baseX=(k-4)*0.055f*s;
+                    const float lean=sinf(d.rotation*3.0f+k*0.71f)*0.20f*s;
+                    const float h=s*(0.72f+0.12f*((k*17)%5)/4.0f);
+                    glColor3f(0.055f+0.018f*(k%4),0.28f+0.045f*(k%5),0.035f+0.014f*(k%3));
+                    glVertex3f(baseX,0,0); glVertex3f(baseX+lean,h,0.035f*s); glVertex3f(baseX+0.06f*s,0,0.02f*s);
+                }
                 glEnd();
+                for(int k=0;k<3;++k){
+                    const float lx=(k-1)*0.13f*s;
+                    drawBox(lx,s*(0.22f+0.08f*k),0.06f*s,0.035f*s,s*(0.34f+0.06f*k),0.035f*s,0.08f,0.38f,0.07f);
+                }
                 break;
             case DECOR_BUSH:
                 drawBox(0,s*0.35f,0,s*0.9f,s*0.7f,s*0.9f,0.08f,0.34f,0.10f);
@@ -4397,8 +4390,9 @@ static void drawDecor()
                 for(int k=-1;k<=1;++k) drawBox(k*0.10f,s*0.55f,0.0f,0.07f,s*1.1f,0.07f,0.12f,0.48f,0.18f);
                 break;
             case DECOR_FLOWER:
-                drawBox(0,s*0.42f,0,0.04f,s*0.84f,0.04f,0.10f,0.42f,0.06f);
-                drawBox(0,s*0.92f,0,0.20f,0.10f,0.20f,0.92f,0.18f,0.72f);
+                drawBox(0,s*0.42f,0,0.045f,s*0.84f,0.045f,0.08f,0.42f,0.05f);
+                for(int k=0;k<6;++k){ const float a=k*(float)M_PI/3.0f; drawBox(cosf(a)*s*0.16f,s*0.92f,sinf(a)*s*0.16f,0.13f,0.08f,0.13f,0.82f,0.16f+0.06f*(k%2),0.70f); }
+                drawBox(0,s*0.92f,0,0.10f,0.10f,0.10f,0.98f,0.74f,0.12f);
                 break;
             case DECOR_ROCK:
                 drawBox(0,s*0.28f,0,s*0.8f,s*0.55f,s*0.7f,0.30f,0.32f,0.34f);
@@ -4418,30 +4412,39 @@ static void drawDecor()
 
 static void drawHouseDetails()
 {
-    // Add doors, windows, frames and roof trim to each house without creating
-    // extra collision objects. Details follow the exact house rotation.
     for (const auto& o : g_objects)
     {
         if (!o.active || o.world != g_world || o.type != OBJECT_HOUSE_ROOF) continue;
-        const float W = o.sx - 0.35f;
-        const float D = o.sz - 0.35f;
-        const float H = 5.5f;
+        const float W=o.sx-1.8f, D=o.sz-1.4f, H=6.8f;
         const float c=cosf(o.yaw), si=sinf(o.yaw);
         auto tr=[&](float lx,float ly,float lz,float& x,float& y,float& z){ x=o.x+lx*c-lz*si; y=ly; z=o.z+lx*si+lz*c; };
         float x,y,z;
-        // Front door and two windows.
-        tr(0,1.35f,-D*0.5f-0.08f,x,y,z); drawBox(x,y,z,2.1f,2.7f,0.12f,0.08f,0.06f,0.04f);
-        tr(-3.65f,2.9f,-D*0.5f-0.10f,x,y,z); drawBox(x,y,z,1.7f,1.55f,0.10f,0.12f,0.45f,0.70f);
-        tr( 3.65f,2.9f,-D*0.5f-0.10f,x,y,z); drawBox(x,y,z,1.7f,1.55f,0.10f,0.12f,0.45f,0.70f);
-        // Cross mullions and warm interior light.
-        for(float lx : {-3.65f,3.65f}) {
-            tr(lx,2.9f,-D*0.5f-0.17f,x,y,z);
-            drawBox(x,y,z,0.10f,1.55f,0.05f,0.72f,0.86f,0.92f);
-            drawBox(x,y,z,1.7f,0.10f,0.05f,0.72f,0.86f,0.92f);
+        // Door with canopy and steps.
+        tr(0,1.45f,-D*0.5f-0.10f,x,y,z); drawBox(x,y,z,2.35f,2.9f,0.14f,0.16f,0.09f,0.055f);
+        tr(0,3.0f,-D*0.5f-0.15f,x,y,z); drawBox(x,y,z,3.2f,0.18f,0.45f,0.25f,0.12f,0.06f);
+        // Four broad windows, each with cross mullions.
+        for(float lx : {-4.1f,4.1f}) for(float ly : {2.7f,5.0f}) {
+            tr(lx,ly,-D*0.5f-0.11f,x,y,z); drawBox(x,y,z,2.35f,1.45f,0.10f,0.08f,0.38f,0.62f);
+            tr(lx,ly,-D*0.5f-0.18f,x,y,z); drawBox(x,y,z,0.10f,1.45f,0.06f,0.70f,0.76f,0.76f); drawBox(x,y,z,2.35f,0.10f,0.06f,0.70f,0.76f,0.76f);
         }
-        // Roof fascia along the two eaves.
-        tr(0,H+0.10f,-D*0.5f-0.55f,x,y,z);
-        glPushMatrix(); glTranslatef(x,y,z); glRotatef(o.yaw*57.2958f,0,1,0); drawBox(0,0,0,W+1.2f,0.30f,0.22f,0.20f,0.09f,0.06f); glPopMatrix();
+        // Side windows and gutters.
+        for(float sideX : {-W*0.5f-0.12f,W*0.5f+0.12f}) {
+            tr(sideX,3.6f,1.0f,x,y,z); glPushMatrix(); glTranslatef(x,y,z); glRotatef(o.yaw*57.2958f,0,1,0); drawBox(0,0,0,0.10f,1.7f,2.0f,0.08f,0.38f,0.62f); glPopMatrix();
+        }
+        tr(0,H+0.25f,-D*0.5f-0.65f,x,y,z); glPushMatrix(); glTranslatef(x,y,z); glRotatef(o.yaw*57.2958f,0,1,0); drawBox(0,0,0,W+2.2f,0.22f,0.18f,0.12f,0.055f,0.03f); glPopMatrix();
+        // Deep eaves, porch railing and a small second-floor balcony make
+        // the house silhouette read as a real structure instead of stacked boxes.
+        for(float sideZ : {-D*0.5f-0.42f, D*0.5f+0.42f}) {
+            tr(0,H+0.12f,sideZ,x,y,z); glPushMatrix(); glTranslatef(x,y,z); glRotatef(o.yaw*57.2958f,0,1,0); drawBox(0,0,0,W+1.9f,0.28f,0.32f,0.18f,0.07f,0.035f); glPopMatrix();
+        }
+        tr(0,3.15f,-D*0.5f-1.18f,x,y,z); glPushMatrix(); glTranslatef(x,y,z); glRotatef(o.yaw*57.2958f,0,1,0);
+        drawBox(-1.85f,0.0f,0,0.10f,1.15f,0.10f,0.28f,0.17f,0.10f);
+        drawBox( 1.85f,0.0f,0,0.10f,1.15f,0.10f,0.28f,0.17f,0.10f);
+        drawBox(0,0.48f,0,3.8f,0.10f,0.10f,0.28f,0.17f,0.10f);
+        glPopMatrix();
+        tr(0,5.85f,-D*0.5f-0.35f,x,y,z); glPushMatrix(); glTranslatef(x,y,z); glRotatef(o.yaw*57.2958f,0,1,0); drawBox(0,0,0,4.8f,0.16f,1.55f,0.22f,0.11f,0.055f); glPopMatrix();
+        // Chimney with cap.
+        tr(W*0.22f,H+1.35f,0.6f,x,y,z); glPushMatrix(); glTranslatef(x,y,z); glRotatef(o.yaw*57.2958f,0,1,0); drawBox(0,0,0,0.95f,2.6f,0.95f,0.22f,0.19f,0.17f); drawBox(0,1.35f,0,1.12f,0.16f,1.12f,0.12f,0.10f,0.08f); glPopMatrix();
     }
 }
 
@@ -4468,7 +4471,7 @@ static void drawWinterSnowAndAtmosphere()
 
 static void drawWorld()
 {
-    const int GRID = 144;
+    const int GRID = 176;
     const float step = (ARENA * 2.0f) / GRID;
     const float day = terrainDayFactor();
 
@@ -4490,10 +4493,19 @@ static void drawWorld()
             const float y10 = terrainHeight(x1, z0);
             const float y11 = terrainHeight(x1, z1);
             const float y01 = terrainHeight(x0, z1);
-            const float light00 = clampf((0.35f + 0.65f * day) * terrainColorScale(y00), 0.22f, 1.05f);
-            const float light10 = clampf((0.35f + 0.65f * day) * terrainColorScale(y10), 0.22f, 1.05f);
-            const float light11 = clampf((0.35f + 0.65f * day) * terrainColorScale(y11), 0.22f, 1.05f);
-            const float light01 = clampf((0.35f + 0.65f * day) * terrainColorScale(y01), 0.22f, 1.05f);
+            const auto n00 = terrainSurfaceNormal(x0,z0);
+            const auto n10 = terrainSurfaceNormal(x1,z0);
+            const auto n11 = terrainSurfaceNormal(x1,z1);
+            const auto n01 = terrainSurfaceNormal(x0,z1);
+            const std::array<float,3> sunDir{{-0.35f,0.86f,0.32f}};
+            const auto diffuse = [&](const std::array<float,3>& n, float y) {
+                const float d = std::max(0.0f, n[0]*sunDir[0]+n[1]*sunDir[1]+n[2]*sunDir[2]);
+                return clampf(0.30f + 0.70f*day + d*0.32f + terrainColorScale(y)*0.10f, 0.20f, 1.18f);
+            };
+            const float light00 = diffuse(n00,y00);
+            const float light10 = diffuse(n10,y10);
+            const float light11 = diffuse(n11,y11);
+            const float light01 = diffuse(n01,y01);
 
             float r00,g00,b00, r10,g10,b10, r11,g11,b11, r01,g01,b01;
             terrainBaseColor(x0,z0,y00,r00,g00,b00);
@@ -5355,6 +5367,54 @@ static const uint8_t g_font5x7[36][7] = {
     {0x0E,0x11,0x11,0x0F,0x01,0x01,0x0E}  // 9
 };
 
+static const uint8_t g_cyrFont5x7[33][7] = {
+    {0x0E,0x11,0x11,0x1F,0x11,0x11,0x11}, // А
+    {0x1F,0x10,0x10,0x1E,0x11,0x11,0x1E}, // Б
+    {0x1E,0x11,0x11,0x1E,0x11,0x11,0x1E}, // В
+    {0x1F,0x10,0x10,0x10,0x10,0x10,0x10}, // Г
+    {0x0E,0x11,0x11,0x11,0x11,0x11,0x1F}, // Д
+    {0x1F,0x10,0x10,0x1E,0x10,0x10,0x1F}, // Е
+    {0x0E,0x11,0x10,0x1E,0x11,0x11,0x0E}, // Ё
+    {0x11,0x15,0x0E,0x04,0x0E,0x15,0x11}, // Ж
+    {0x1F,0x02,0x04,0x08,0x10,0x11,0x1F}, // З
+    {0x11,0x13,0x15,0x19,0x11,0x11,0x11}, // И
+    {0x11,0x11,0x15,0x15,0x1B,0x11,0x11}, // Й
+    {0x11,0x12,0x14,0x18,0x14,0x12,0x11}, // К
+    {0x10,0x10,0x10,0x10,0x10,0x10,0x1F}, // Л
+    {0x11,0x1B,0x15,0x15,0x11,0x11,0x11}, // М
+    {0x11,0x19,0x15,0x13,0x11,0x11,0x11}, // Н
+    {0x0E,0x11,0x11,0x11,0x11,0x11,0x0E}, // О
+    {0x1E,0x11,0x11,0x1E,0x10,0x10,0x10}, // П
+    {0x1E,0x11,0x11,0x1E,0x14,0x12,0x11}, // Р
+    {0x0F,0x10,0x10,0x0E,0x01,0x01,0x1E}, // С
+    {0x1F,0x04,0x04,0x04,0x04,0x04,0x04}, // Т
+    {0x11,0x11,0x11,0x11,0x11,0x11,0x0E}, // У
+    {0x1F,0x05,0x05,0x05,0x05,0x05,0x05}, // Ф
+    {0x11,0x0A,0x04,0x04,0x04,0x0A,0x11}, // Х
+    {0x15,0x15,0x15,0x15,0x15,0x15,0x1F}, // Ц
+    {0x11,0x11,0x1F,0x11,0x11,0x11,0x0E}, // Ч
+    {0x15,0x15,0x15,0x1F,0x15,0x15,0x15}, // Ш
+    {0x15,0x15,0x15,0x1F,0x15,0x15,0x1F}, // Щ
+    {0x1E,0x12,0x12,0x1E,0x12,0x12,0x1E}, // Ъ
+    {0x11,0x11,0x11,0x1F,0x01,0x01,0x1E}, // Ы
+    {0x10,0x10,0x10,0x1E,0x11,0x11,0x1E}, // Ь
+    {0x1F,0x10,0x10,0x1E,0x10,0x10,0x1F}, // Э
+    {0x13,0x15,0x15,0x1D,0x15,0x15,0x13}, // Ю
+    {0x0F,0x11,0x11,0x0F,0x05,0x09,0x11}  // Я
+};
+
+static int cyrillicIndex(uint32_t cp)
+{
+    if (cp>=0x430 && cp<=0x44F) cp-=0x20; // lowercase -> uppercase
+    if (cp==0x451) cp=0x401;             // ё -> Ё
+    static const uint32_t letters[33] = {
+        0x410,0x411,0x412,0x413,0x414,0x415,0x401,0x416,0x417,0x418,0x419,
+        0x41A,0x41B,0x41C,0x41D,0x41E,0x41F,0x420,0x421,0x422,0x423,0x424,
+        0x425,0x426,0x427,0x428,0x429,0x42A,0x42B,0x42C,0x42D,0x42E,0x42F};
+    for(int i=0;i<33;++i) if(cp==letters[i]) return i;
+    return -1;
+}
+
 static int fontIndex(char c)
 {
     c = (char)std::toupper((unsigned char)c);
@@ -5366,51 +5426,58 @@ static int fontIndex(char c)
 static void drawText(const std::string& text, float x, float y, float scale, float spacing = 1.0f)
 {
     glBegin(GL_QUADS);
-    float pen = x;
-    for (char c : text)
-    {
-        if (c == ' ') { pen += 4.0f * scale; continue; }
-        if (c == '-' ) {
-            const float w=5.0f*scale, h=1.0f*scale;
-            glVertex2f(pen,y+3.0f*scale); glVertex2f(pen+w,y+3.0f*scale);
-            glVertex2f(pen+w,y+4.0f*scale); glVertex2f(pen,y+4.0f*scale);
-            pen += 6.0f*scale; continue;
-        }
-        if (c == ':' ) {
-            const float q=scale;
-            glVertex2f(pen+2*q,y+2*q); glVertex2f(pen+3*q,y+2*q); glVertex2f(pen+3*q,y+3*q); glVertex2f(pen+2*q,y+3*q);
-            glVertex2f(pen+2*q,y+5*q); glVertex2f(pen+3*q,y+5*q); glVertex2f(pen+3*q,y+6*q); glVertex2f(pen+2*q,y+6*q);
-            pen += 5.0f*scale; continue;
-        }
-        if (c == '.' || c == '!') {
-            const float q=scale;
-            const float yy=(c=='.')?y:y+1.0f*scale;
-            glVertex2f(pen+2*q,yy); glVertex2f(pen+3*q,yy); glVertex2f(pen+3*q,yy+q); glVertex2f(pen+2*q,yy+q);
-            if (c=='!') { glVertex2f(pen+2*q,y+5*q); glVertex2f(pen+3*q,y+5*q); glVertex2f(pen+3*q,y+7*q); glVertex2f(pen+2*q,y+7*q); }
-            pen += 5.0f*scale; continue;
-        }
-        const int idx=fontIndex(c);
-        if (idx < 0) { pen += 6.0f*scale; continue; }
-        for (int row=0; row<7; ++row)
-        {
-            const uint8_t bits=g_font5x7[idx][row];
-            for (int col=0; col<5; ++col)
-            {
-                if (!(bits & (1u << (4-col)))) continue;
-                const float x0=pen+col*scale, y0=y+(6-row)*scale;
-                glVertex2f(x0,y0); glVertex2f(x0+scale,y0); glVertex2f(x0+scale,y0+scale); glVertex2f(x0,y0+scale);
-            }
-        }
-        pen += 6.0f*scale + spacing*scale;
+    float pen=x;
+    for(size_t i=0;i<text.size();){
+        unsigned char c=(unsigned char)text[i];
+        uint32_t cp=0; size_t consumed=1;
+        if(c<0x80){ cp=c; }
+        else if((c&0xE0)==0xC0 && i+1<text.size()) { cp=c&0x1F; cp=(cp<<6)|((unsigned char)text[i+1]&0x3F); consumed=2; }
+        else if((c&0xF0)==0xE0 && i+2<text.size()) { cp=c&0x0F; cp=(cp<<6)|((unsigned char)text[i+1]&0x3F); cp=(cp<<6)|((unsigned char)text[i+2]&0x3F); consumed=3; }
+        else { ++i; pen+=6.0f*scale; continue; }
+        i+=consumed;
+        if(cp==' '){ pen+=4.0f*scale; continue; }
+        if(cp=='-' || cp==0x2013 || cp==0x2014){ const float w=5*scale; glVertex2f(pen,y+3*scale);glVertex2f(pen+w,y+3*scale);glVertex2f(pen+w,y+4*scale);glVertex2f(pen,y+4*scale);pen+=6*scale;continue; }
+        if(cp==':'){ const float q=scale; glVertex2f(pen+2*q,y+2*q);glVertex2f(pen+3*q,y+2*q);glVertex2f(pen+3*q,y+3*q);glVertex2f(pen+2*q,y+3*q);glVertex2f(pen+2*q,y+5*q);glVertex2f(pen+3*q,y+5*q);glVertex2f(pen+3*q,y+6*q);glVertex2f(pen+2*q,y+6*q);pen+=5*scale;continue; }
+        if(cp=='|'){ const float q=scale; glVertex2f(pen+2*q,y);glVertex2f(pen+3*q,y);glVertex2f(pen+3*q,y+7*q);glVertex2f(pen+2*q,y+7*q);pen+=5*q;continue; }
+        if(cp=='.' || cp=='!'){ const float q=scale; const float yy=(cp=='.')?y:y+scale; glVertex2f(pen+2*q,yy);glVertex2f(pen+3*q,yy);glVertex2f(pen+3*q,yy+q);glVertex2f(pen+2*q,yy+q); if(cp=='!'){glVertex2f(pen+2*q,y+5*q);glVertex2f(pen+3*q,y+5*q);glVertex2f(pen+3*q,y+7*q);glVertex2f(pen+2*q,y+7*q);} pen+=5*scale;continue; }
+        if(cp==',' || cp==';'){ const float q=scale; glVertex2f(pen+2*q,y);glVertex2f(pen+3*q,y);glVertex2f(pen+3*q,y+q);glVertex2f(pen+2*q,y+q); if(cp==';'){glVertex2f(pen+2*q,y+3*q);glVertex2f(pen+3*q,y+3*q);glVertex2f(pen+3*q,y+4*q);glVertex2f(pen+2*q,y+4*q);} pen+=5*scale;continue; }
+        if(cp=='(' || cp==')' || cp=='/' || cp=='\\' || cp=='"'){ pen+=5*scale; continue; }
+        int idx=-1; const uint8_t* glyph=nullptr;
+        if(cp<128){ idx=fontIndex((char)cp); if(idx>=0) glyph=g_font5x7[idx]; }
+        else { int ci=cyrillicIndex(cp); if(ci>=0) glyph=g_cyrFont5x7[ci]; }
+        if(!glyph){ pen+=6*scale; continue; }
+        for(int row=0;row<7;++row){ const uint8_t bits=glyph[row]; for(int col=0;col<5;++col){ if(!(bits&(1u<<(4-col)))) continue; const float x0=pen+col*scale,y0=y+(6-row)*scale; glVertex2f(x0,y0);glVertex2f(x0+scale,y0);glVertex2f(x0+scale,y0+scale);glVertex2f(x0,y0+scale); }}
+        pen+=6*scale+spacing*scale;
     }
     glEnd();
 }
 
+static std::vector<std::string> hudMessageLines()
+{
+    std::vector<std::string> lines;
+    std::string line, word;
+    auto flushWord = [&]() {
+        if(word.empty()) return;
+        const std::string candidate = line.empty() ? word : line + " " + word;
+        if(candidate.size() > 54 && !line.empty()) { lines.push_back(line); line = word; }
+        else line = candidate;
+        word.clear();
+    };
+    for(char c : g_message) {
+        if(c==' ' || c=='\n' || c=='\t') flushWord();
+        else word.push_back(c);
+    }
+    flushWord();
+    if(lines.empty()) lines.push_back("");
+    if(lines.size()>3) lines.resize(3);
+    return lines;
+}
+
 static std::string hudMessageText()
 {
-    std::string s = g_message;
-    if (s.size() > 62) s.resize(62);
-    return s;
+    auto lines=hudMessageLines();
+    std::string out; for(size_t i=0;i<lines.size();++i){ if(i) out += " | "; out += lines[i]; }
+    return out;
 }
 
 // ============================================================
@@ -5702,15 +5769,17 @@ static void drawHUD(
 
     // Story/transmission panel. The message system is now visible in-game,
     // so the campaign is not just background state.
-    const float panelW = std::min(900.0f, (float)W - 60.0f);
+    const float panelW = std::min(1100.0f, (float)W - 50.0f);
     const float panelX = W*0.5f - panelW*0.5f;
-    const float panelY = H - 78.0f;
-    glColor3f(0.02f,0.025f,0.04f);
-    rect(panelX,panelY,panelX+panelW,panelY+38.0f);
+    const float panelY = H - 118.0f;
+    glColor3f(0.015f,0.022f,0.035f);
+    rect(panelX,panelY,panelX+panelW,panelY+78.0f);
     glColor3f(0.08f,0.42f,0.55f);
-    rect(panelX,panelY,panelX+4.0f,panelY+38.0f);
+    rect(panelX,panelY,panelX+5.0f,panelY+78.0f);
     glColor3f(0.80f,0.92f,1.0f);
-    drawText(hudMessageText(),panelX+14.0f,panelY+12.0f,2.0f,0.35f);
+    const auto lines = hudMessageLines();
+    for(size_t li=0; li<lines.size(); ++li)
+        drawText(lines[li],panelX+16.0f,panelY+14.0f+(float)(lines.size()-1-li)*20.0f,1.72f,0.18f);
 
     // health background
     glColor3f(

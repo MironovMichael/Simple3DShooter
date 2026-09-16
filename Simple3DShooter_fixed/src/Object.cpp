@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <cmath>
 #include "Object.h"
 
 namespace
@@ -152,3 +154,15 @@ GameObject createObject(
 
     return object;
 }
+
+// V25: safer destructible-object API.
+bool GameObject::applyDamage(float damage)
+{
+    if (!active || !destructible || damage <= 0.0f) return false;
+    health = std::max(0.0f, health - damage);
+    if (health <= 0.0f) { active = false; return true; }
+    return false;
+}
+float GameObject::getTopY() const { return position.y + size.y * 0.5f; }
+float GameObject::distanceXZ(const Vec3& point) const
+{ const float dx=point.x-position.x,dz=point.z-position.z; return std::sqrt(dx*dx+dz*dz); }

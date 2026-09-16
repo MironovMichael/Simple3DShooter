@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <algorithm>
 
 struct Vec3
 {
@@ -286,3 +287,12 @@ inline bool rayAABB(
 
     return true;
 }
+// V25 collision quality helpers: finite checks, expansion and safe clamping.
+inline bool isFiniteVec3(const Vec3& v)
+{ return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z); }
+
+inline float clampCollisionRadius(float r)
+{ return std::max(0.01f, std::min(r, 1000.0f)); }
+
+inline AABB expandAABB(const AABB& box, float margin)
+{ const float m=std::max(0.0f,margin); return AABB(Vec3(box.min.x-m,box.min.y-m,box.min.z-m), Vec3(box.max.x+m,box.max.y+m,box.max.z+m)); }
