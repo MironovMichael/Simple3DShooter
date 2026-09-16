@@ -1,0 +1,10 @@
+Multiverse v9
+=============
+- Crossing any main-map edge wraps the player to the opposite edge.
+- Added Ocean World and Winter World with distinct procedural terrain/materials.
+- Main world has six distributed inter-world portals: four to ocean/winter and two to the city.
+- Press E near a portal to travel. Each destination world has a return portal at (0,0).
+- Portal visuals are separate from collision objects, so they do not create hitbox conflicts.
+- Enemies are tagged by world; main-world enemies do not appear in destination worlds.
+- Ocean and winter worlds seed their own hostile populations on first visit.
+- Existing city, settlements, tunnels and tunnel drones remain in the main world.

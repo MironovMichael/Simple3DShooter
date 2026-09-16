@@ -1,0 +1,5 @@
+Build fix v8
+============
+Fixed the C++ compile error caused by createCityBiome() being called before its declaration by adding a forward declaration near the world-object definitions.
+The city biome implementation remains below and is not duplicated.
+The city skyscrapers retain conservative AABB collision boxes based on their actual footprint, so decorative facade details do not create extra hitboxes.

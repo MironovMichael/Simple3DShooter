@@ -1,0 +1,3 @@
+C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter_fixed/build/CMakeFiles/Simple3DShooter.dir
+C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter_fixed/build/CMakeFiles/edit_cache.dir
+C:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter_fixed/build/CMakeFiles/rebuild_cache.dir

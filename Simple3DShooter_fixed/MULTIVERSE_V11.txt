@@ -1,0 +1,10 @@
+Multiverse v11
+==============
+- Ocean and Winter worlds now have distinct enemy variants and movement gimmicks.
+- Ocean: fast amphibious raiders with weaving movement and separate composition.
+- Winter: frost stalkers with burst movement and heavier composition.
+- Ocean-only objects: energy beacons, shipwrecks, icebergs.
+- Winter-only objects: pines, radar stations, ice crystals.
+- Objects use per-world local coordinates, so they cannot overlap main-world city/settlements/tunnels.
+- Their collision radii are separate from ordinary main-world object hitboxes.
+- Minimap logic remains world-local; main-world portals stay in the main world.

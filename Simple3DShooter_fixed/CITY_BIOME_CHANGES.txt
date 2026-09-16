@@ -1,0 +1,7 @@
+City biome added:
+- 26 procedural skyscrapers
+- Separate flattened city terrain biome
+- Roads, sidewalks and central plaza
+- Detailed facade/window/crown rendering
+- Conservative per-building AABB collision hitboxes
+- City concept art included in assets/city/

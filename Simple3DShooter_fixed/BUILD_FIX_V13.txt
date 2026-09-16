@@ -1,0 +1,9 @@
+Build fix v13
+============
+Fixed declaration order for multiverse types/state and helper prototypes.
+Removed accidental global-scope createOtherWorldObjects() call.
+Added createOtherWorldObjects() to game initialization.
+Added forward declarations for world enemy variant functions.
+Moved updateOtherWorldEnemyBehavior(e, dt) into updateEnemies().
+Removed invalid e/dt use from drawEnemyProjectiles().
+Local syntax check with g++ C++17, -Wall -Wextra -Wpedantic: PASS.

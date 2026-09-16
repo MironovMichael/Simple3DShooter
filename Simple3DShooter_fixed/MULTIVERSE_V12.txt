@@ -1,0 +1,10 @@
+Multiverse v12
+==============
+- Ocean and Winter worlds use separate local coordinate spaces.
+- Their objects and enemies are tagged by world and rendered only in that world.
+- Added distinct ocean/winter enemy silhouettes and colors.
+- Ocean enemies have fin/floatation gear; winter enemies have ice armor.
+- Ocean-only objects: beacons, shipwrecks, icebergs.
+- Winter-only objects: pines, radar stations, ice crystals.
+- Minimap now shows destination portals and unique-world objects in the current world.
+- Main-world portal positions were moved to open sectors to avoid city/settlement overlap.
