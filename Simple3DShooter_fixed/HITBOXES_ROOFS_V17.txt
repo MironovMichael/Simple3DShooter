@@ -1,0 +1,7 @@
+V17 FIXES
+- Fixed invisible house roofs: the old roof collision object was at ground level.
+- Added dedicated OBJECT_HOUSE_ROOF and correct top-of-house placement/rendering.
+- Added player/enemy collision for ocean/winter landmarks.
+- Added ray hitboxes for beacons, wrecks, icebergs, pines, radar stations and ice crystals.
+- Added projectile blocking against those landmarks.
+- Pickups remain non-solid.

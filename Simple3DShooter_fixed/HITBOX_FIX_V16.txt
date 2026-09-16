@@ -1,0 +1,6 @@
+V16 hitbox/enemy rendering fix
+- Fixed rayAABB array loop: 3 axes instead of 4 (critical memory bug).
+- Rocket ammo pickups are now reachable and collectible.
+- Rocket ammo pickup radius increased and uses 3D distance.
+- Submarine rocket hitbox split into hull/nose/rear/tower volumes.
+- Humanoid enemies have detailed armor, helmet, visor, limbs, boots, backpack and rifle.

@@ -1,0 +1,10 @@
+Rocket Launcher / Ocean Combat v15
+===================================
+- Key 4: ROCKET LAUNCHER (Ocean World only).
+- Player rockets: 140 direct damage, 18m explosion radius.
+- 24 ocean-only rocket ammo crates, +3 reserve rockets each.
+- Giant flying submarines: 1600 HP, visible health bars.
+- Player rocket explosions damage submarines and nearby enemies.
+- Submarine missiles explode and damage the player by blast falloff.
+- Rocket ammo crates appear on the ocean minimap.
+- Leaving the ocean automatically returns to the pistol.

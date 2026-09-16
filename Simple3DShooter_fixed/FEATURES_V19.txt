@@ -1,0 +1,6 @@
+V19 changes
+- Main-world vegetation is now hard-gated to WORLD_MAIN, preventing grass/crystal decor from leaking into ocean and winter worlds after portal transitions.
+- Removed the explicit winter ice-crystal props.
+- Player hitscan weapons can intercept incoming submarine heavy rockets; destroyed rockets create a small harmless explosion and HUD message.
+- Tank models enlarged by 1.65x and tank hitboxes increased to match the new silhouette.
+- Hitscan enemy selection now ignores enemies belonging to another world.

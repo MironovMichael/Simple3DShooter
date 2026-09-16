@@ -1,0 +1,18 @@
+V20 FIXES
+
+1. HOUSE ROOFS
+- Fixed the world-object terrain snapping that was resetting OBJECT_HOUSE_ROOF Y to ground level.
+- Roofs now keep their intended elevation above the 5.5-unit house walls.
+- Reworked roof rendering into two visible sloped roof slabs plus a raised ridge.
+- Roof dimensions remain conservative enough for collision and portal safety.
+
+2. SAFE RETURN TELEPORTS
+- Added a final destination validation before every inter-world teleport.
+- Return portals from Ocean/Winter no longer blindly send the player to (0,0).
+- The destination is checked against buildings, roofs, trees, skyscrapers, crates, world-specific landmarks and tunnel zones.
+- If occupied, the game searches expanding rings for the nearest clear destination.
+- The same safety check also protects future portal destinations from newly added map objects.
+
+3. BUILD NOTE
+- The current environment does not provide OpenGL/GLFW development libraries, so full local linking could not be performed here.
+- The source changes are self-contained in src/main.cpp.

@@ -1,0 +1,39 @@
+V21 - JETPACK / CAMPAIGN / VISUAL POLISH / BUILD FIXES
+
+1. Jetpack
+- F toggles the jetpack.
+- SPACE provides vertical thrust while the jetpack is enabled.
+- LEFT SHIFT increases horizontal air-control speed.
+- Fuel drains while thrusting and recharges automatically on the ground.
+- Fuel/jetpack status is shown in the HUD.
+- Added visual exhaust/flame effect.
+- Jetpack movement remains compatible with terrain, portals and tunnel ceiling collision.
+
+2. Story
+- Replaced the short repeating message sequence with a 16-stage Operation Riftfall campaign.
+- Added transmissions and concrete objectives for the frontier, tunnels, city, ocean and winter worlds.
+- Added an in-game transmission panel and campaign stage indicator so the story is actually visible.
+
+3. Visual improvements
+- Added distance fog with different atmospheric settings for main, ocean and winter worlds.
+- Added a compact pixel-font renderer for HUD transmissions and controls.
+- Fog is disabled for sky/HUD/radar so UI and sky remain crisp.
+- Existing procedural terrain, enemies, tanks, submarines and portals keep their optimized render-distance culling.
+
+4. Build/error fixes
+- Removed the duplicated radar object loop inherited from V20.
+- V21 main.cpp passes a strict g++ C++17 syntax-only check with -Wall/-Wextra/-Wpedantic using OpenGL/GLFW API stubs.
+- All project .cpp files pass the same syntax-only check.
+- CMake continues to exclude Enemy.cpp because enemy implementation is defined in main.cpp; this avoids the previous multiple-definition linker error.
+
+CONTROLS
+WASD - move
+LEFT SHIFT - sprint / stronger jetpack air control
+SPACE - jump, or jetpack thrust when enabled
+F - jetpack on/off
+LMB - fire
+R - reload
+1/2/3 - weapons
+4 - rocket launcher in ocean world
+E - portal
+ESC - exit

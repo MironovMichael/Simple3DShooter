@@ -1,0 +1,9 @@
+V17 BUILD FIX
+
+Fixed the compilation error in src/main.cpp around line 2163:
+- missing ')' in the enemy loop condition
+- corrected: for (size_t i = 0; i < g_enemies.size(); ++i)
+
+The previous V17 archive contained a malformed loop header introduced during the hitbox patch.
+
+CMake configuration was checked with the source after the fix; this environment does not have OpenGL development libraries, so full linking cannot be performed here. The reported C++ syntax error itself is fixed.

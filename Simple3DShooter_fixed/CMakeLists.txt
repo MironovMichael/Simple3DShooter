@@ -10,7 +10,6 @@ find_package(glfw3 CONFIG REQUIRED)
 
 set(SOURCES
     src/main.cpp
-    src/Enemy.cpp
     src/Item.cpp
     src/ItemManager.cpp
     src/Object.cpp

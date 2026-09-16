@@ -45,6 +45,7 @@
 #include <string>
 #include <algorithm>
 #include <cstdint>
+#include <cctype>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -152,8 +153,6 @@ static void createOtherWorldObjects()
     }
     g_otherWorldObjects.push_back({-120.0f, -95.0f, 1.4f, 0.0f, WINTER_OBJECT_RADAR, WORLD_WINTER, 7.0f});
     g_otherWorldObjects.push_back({130.0f, 110.0f, 1.1f, 0.0f, WINTER_OBJECT_RADAR, WORLD_WINTER, 7.0f});
-    g_otherWorldObjects.push_back({-45.0f, 165.0f, 1.5f, 0.0f, WINTER_OBJECT_ICE_CRYSTAL, WORLD_WINTER, 4.0f});
-    g_otherWorldObjects.push_back({55.0f, -165.0f, 1.5f, 0.0f, WINTER_OBJECT_ICE_CRYSTAL, WORLD_WINTER, 4.0f});
 }
 
 static void drawOtherWorldObject(const OtherWorldObject& o)
@@ -245,6 +244,19 @@ static float g_pz = 0.0f;
 static float g_vy = 0.0f;
 static bool g_onGround = true;
 static bool g_inTunnel = false;
+
+// Jetpack: F toggles the system, SPACE provides thrust while enabled.
+// Fuel is finite and automatically recharges while safely grounded.
+static bool g_jetpackEnabled = false;
+static float g_jetpackFuel = 100.0f;
+static float g_jetpackHeat = 0.0f;
+static float g_jetpackFxTimer = 0.0f;
+static constexpr float JETPACK_MAX_FUEL = 100.0f;
+static constexpr float JETPACK_DRAIN = 28.0f;
+static constexpr float JETPACK_RECHARGE = 20.0f;
+static constexpr float JETPACK_THRUST = 31.0f;
+static constexpr float JETPACK_MAX_UP_SPEED = 14.0f;
+static constexpr float JETPACK_AIR_CONTROL = 8.5f;
 static constexpr float PLAYER_STEP_HEIGHT = 1.25f;
 static constexpr float PLAYER_JUMPABLE_HEIGHT = 2.60f;
 
@@ -277,10 +289,38 @@ static constexpr float OBJECT_RENDER_DISTANCE = 620.0f;
 static constexpr float ENEMY_RENDER_DISTANCE = 820.0f;
 
 static int g_storyStage = 0;
-static float g_storyTimer = 8.0f;
+static float g_storyTimer = 7.0f;
+static int g_storyObjective = 0;
+
+struct StoryBeat {
+    const char* transmission;
+    const char* objective;
+    int worldHint;
+};
+
+static const StoryBeat g_storyBeats[] = {
+    {"OPERATION RIFTFALL: THE FRONTIER GATE HAS FAILED.", "Secure the landing zone and survive the first assault.", WORLD_MAIN},
+    {"COMMAND: SCOUTS REPORT THREE SIGNALS BENEATH THE TERRAIN.", "Eliminate 10 hostiles and locate the underground route.", WORLD_MAIN},
+    {"ARCHIVE: THE TUNNELS WERE BUILT AROUND AN UNKNOWN ENERGY CORE.", "Push through the tunnel network and keep the route open.", WORLD_MAIN},
+    {"WARNING: ARMORED UNITS ARE MOVING TOWARD THE CITY.", "Destroy 5 heavy units before they reach the urban sector.", WORLD_MAIN},
+    {"COMMAND: A RIFT HAS OPENED OVER THE EASTERN FRONTIER.", "Find an active portal to the ocean world.", WORLD_MAIN},
+    {"OCEAN LOG: THE SKY SUBMARINES ARE GUARDING A LOST CONVOY.", "Survive the ocean assault and destroy hostile machines.", WORLD_OCEAN},
+    {"NAVAL ARCHIVE: THE CONVOY CARRIED A SECOND RIFT KEY.", "Recover supplies and intercept enemy rockets.", WORLD_OCEAN},
+    {"SIGNAL: SOMETHING IS BROADCASTING FROM THE POLAR WORLD.", "Return through a safe portal and follow the polar signal.", WORLD_OCEAN},
+    {"WINTER LOG: THE SIGNAL IS AN AUTOMATED DISTRESS BEACON.", "Cross the snowfield and secure the relay station.", WORLD_WINTER},
+    {"DISTRESS BEACON: THE CORE IS NOT A WEAPON. IT IS A LOCK.", "Hold the relay while hostile reinforcements arrive.", WORLD_WINTER},
+    {"COMMAND: THREE WORLD SIGNALS ARE NOW SYNCHRONIZED.", "Return to the frontier and prepare for the final breach.", WORLD_WINTER},
+    {"FINAL PROTOCOL: THE RIFT IS OPENING. ALL HOSTILE FORCES ARE MOBILIZING.", "Survive the final assault and eliminate the remaining hostiles.", WORLD_MAIN},
+    {"FINAL TRANSMISSION: THE CORE CAN CLOSE THE RIFT, BUT ONLY ONCE.", "Reach the central command zone.", WORLD_MAIN},
+    {"COMMAND: CORE LOCK ACQUIRED. COVER THE EXTRACTION TEAM.", "Hold the command zone for the final extraction.", WORLD_MAIN},
+    {"EXTRACTION: THE RIFT IS COLLAPSING. KEEP FIGHTING.", "Complete the operation by reaching the extraction perimeter.", WORLD_MAIN},
+    {"EPILOGUE: FRONTIER STATIONS ARE RECEIVING A CLEAR SIGNAL AGAIN.", "Operation Riftfall complete. Continue the campaign or explore.", WORLD_MAIN}
+};
+
+static constexpr int STORY_BEAT_COUNT = sizeof(g_storyBeats) / sizeof(g_storyBeats[0]);
 
 static std::string g_message =
-    "MISSION: SURVIVE AND ELIMINATE THE HOSTILES";
+    "OPERATION RIFTFALL: SURVIVE AND SECURE THE FRONTIER";
 
 // ============================================================
 // WEAPONS
@@ -290,7 +330,8 @@ enum WeaponType
 {
     WEAPON_PISTOL = 0,
     WEAPON_RIFLE = 1,
-    WEAPON_SHOTGUN = 2
+    WEAPON_SHOTGUN = 2,
+    WEAPON_ROCKET = 3
 };
 
 struct Weapon
@@ -319,7 +360,7 @@ struct Weapon
     float range;
 };
 
-static Weapon g_weapons[3] =
+static Weapon g_weapons[4] =
 {
     {
         "PISTOL",
@@ -367,6 +408,22 @@ static Weapon g_weapons[3] =
         0.0f,
         2.5f,
         70.0f
+    },
+
+    {
+        "ROCKET LAUNCHER",
+        1,
+        2,
+        6,
+        1.15f,
+        0.0f,
+        140.0f,
+        1,
+        0.0f,
+        1.8f,
+        0.0f,
+        1.5f,
+        260.0f
     }
 };
 
@@ -391,7 +448,9 @@ enum ObjectType
     OBJECT_AMMO,
     OBJECT_MEDKIT,
     OBJECT_BUILDING,
-    OBJECT_SKYSCRAPER
+    OBJECT_SKYSCRAPER,
+    OBJECT_ROCKET_AMMO,
+    OBJECT_HOUSE_ROOF
 };
 
 struct WorldObject
@@ -494,10 +553,24 @@ struct Projectile
 
     // Heavy rockets fired by the giant flying submarines.
     bool heavyRocket = false;
+    bool playerRocket = false;
     float radius = 0.10f;
+    float explosionRadius = 0.0f;
+};
+
+struct Explosion
+{
+    float x,y,z;
+    float age;
+    float life;
+    float radius;
+    float maxRadius;
 };
 
 static std::vector<Projectile> g_projectiles;
+static void spawnPlayerRocket();
+static void spawnExplosion(float x,float y,float z,float radius,float damage,bool hurtPlayer,bool hurtSubs);
+static std::vector<Explosion> g_explosions;
 
 struct TunnelSegment
 {
@@ -1211,7 +1284,7 @@ static bool playerCollidesWithObject(
 
 static bool tunnelConflictsObject(const WorldObject& o)
 {
-    if (o.type == OBJECT_AMMO || o.type == OBJECT_MEDKIT)
+    if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT)
         return false;
 
     const float hx = o.sx * 0.5f + 1.0f;
@@ -1240,7 +1313,7 @@ static float playerFloorHeight(float x, float z)
     for (const auto& o : g_objects)
     {
         if (!o.active || o.world != g_world) continue;
-        if (o.type == OBJECT_AMMO || o.type == OBJECT_MEDKIT) continue;
+        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT) continue;
         if (underground && tunnelConflictsObject(o)) continue;
         if (!pointInsideBox(x,z,o,PLAYER_RADIUS*0.35f)) continue;
         const float top=o.y+o.sy*0.5f;
@@ -1259,7 +1332,7 @@ static bool playerInsideStepableObstacle(float x, float z)
     for (const auto& o : g_objects)
     {
         if (!o.active || o.world != g_world) continue;
-        if (o.type == OBJECT_AMMO || o.type == OBJECT_MEDKIT) continue;
+        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT) continue;
         if (g_inTunnel && tunnelConflictsObject(o)) continue;
         if (!playerCollidesWithObject(x,z,o,PLAYER_RADIUS)) continue;
         const float top=o.y+o.sy*0.5f;
@@ -1291,10 +1364,13 @@ static bool playerBlocked(float x, float z)
     if (stepable)
         return false;
 
+    if (otherWorldObjectBlocked(x, z, PLAYER_RADIUS))
+        return true;
+
     for (const auto& o : g_objects)
     {
         if (!o.active || o.world != g_world) continue;
-        if (o.type == OBJECT_AMMO || o.type == OBJECT_MEDKIT) continue;
+        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT) continue;
         if (g_inTunnel && tunnelConflictsObject(o)) continue;
         if (playerCollidesWithObject(x, z, o, PLAYER_RADIUS))
         {
@@ -1311,12 +1387,16 @@ static bool playerBlocked(float x, float z)
 
 static bool enemyBlocked(float x, float z, float radius)
 {
+    if (otherWorldObjectBlocked(x, z, radius))
+        return true;
+
     for (const auto& o : g_objects)
     {
         if (!o.active || o.world != g_world)
             continue;
 
         if (o.type == OBJECT_AMMO ||
+            o.type == OBJECT_ROCKET_AMMO ||
             o.type == OBJECT_MEDKIT)
             continue;
 
@@ -1462,6 +1542,29 @@ static bool rayAABB(
     return true;
 }
 
+// Conservative collision volume for world-specific landmarks.
+static bool rayOtherWorldObject(float ox,float oy,float oz,
+                                float dx,float dy,float dz,
+                                const OtherWorldObject& o,float& tHit)
+{
+    if (o.world != g_world) return false;
+    const float baseY=terrainHeight(o.x,o.z);
+    float sx=2.0f, sy=2.0f, sz=2.0f;
+    switch(o.type)
+    {
+        case OCEAN_OBJECT_BEACON: sx=2.2f; sy=4.8f; sz=2.2f; break;
+        case OCEAN_OBJECT_WRECK: sx=8.0f; sy=4.2f; sz=3.6f; break;
+        case OCEAN_OBJECT_ICEBERG: sx=5.8f; sy=9.2f; sz=4.8f; break;
+        case WINTER_OBJECT_PINE: sx=4.6f; sy=9.5f; sz=4.6f; break;
+        case WINTER_OBJECT_RADAR: sx=5.8f; sy=7.4f; sz=5.8f; break;
+        case WINTER_OBJECT_ICE_CRYSTAL: sx=2.4f; sy=4.8f; sz=2.4f; break;
+        default: break;
+    }
+    sx*=o.scale; sy*=o.scale; sz*=o.scale;
+    return rayAABB(ox,oy,oz,dx,dy,dz,o.x,baseY+sy*0.5f,o.z,
+                   sx*0.5f,sy*0.5f,sz*0.5f,tHit);
+}
+
 // ============================================================
 // DRAWING
 // ============================================================
@@ -1546,6 +1649,12 @@ static void drawAmmo(float x, float baseY, float z)
     drawBox(x, baseY + 0.35f, z, 0.9f, 0.7f, 0.7f, 0.12f, 0.23f, 0.38f);
     drawBox(x, baseY + 0.72f, z, 0.5f, 0.08f, 0.5f, 0.95f, 0.72f, 0.05f);
 }
+static void drawRocketAmmo(float x,float baseY,float z)
+{
+    drawBox(x,baseY+0.48f,z,1.25f,0.95f,1.05f,0.20f,0.18f,0.12f);
+    drawBox(x,baseY+0.98f,z,0.75f,0.08f,0.78f,0.92f,0.12f,0.04f);
+    drawBox(x,baseY+0.99f,z,0.12f,0.10f,0.60f,0.95f,0.75f,0.10f);
+}
 
 static void drawMedkit(float x, float baseY, float z)
 {
@@ -1562,9 +1671,32 @@ static void drawBuildingWall(const WorldObject& o)
 
 static void drawHouseRoof(float x, float y, float z, float w, float d)
 {
-    drawBox(x, y, z, w + 0.9f, 0.65f, d + 0.9f, 0.22f, 0.13f, 0.10f);
-    // raised ridge gives the houses a recognizable silhouette.
-    drawBox(x, y + 0.38f, z, w * 0.72f, 0.22f, d + 0.35f, 0.30f, 0.16f, 0.12f);
+    // The roof is deliberately drawn above the wall top.  It uses two
+    // sloped slabs plus a ridge instead of a buried flat box, so it remains
+    // clearly visible even on uneven terrain.
+    const float roofW = w + 1.15f;
+    const float roofD = d + 1.05f;
+    const float halfW = roofW * 0.5f;
+    const float slope = 24.0f;
+    const float rise = halfW * sinf(slope * (float)M_PI / 180.0f);
+
+    glPushMatrix();
+    glTranslatef(x, y + 0.30f, z);
+    glRotatef(-slope, 0.0f, 0.0f, 1.0f);
+    drawBox(-halfW * 0.25f, 0.0f, 0.0f, halfW * 0.52f, 0.48f, roofD,
+            0.24f, 0.12f, 0.08f);
+    glPopMatrix();
+
+    glPushMatrix();
+    glTranslatef(x, y + 0.30f, z);
+    glRotatef(slope, 0.0f, 0.0f, 1.0f);
+    drawBox(halfW * 0.25f, 0.0f, 0.0f, halfW * 0.52f, 0.48f, roofD,
+            0.24f, 0.12f, 0.08f);
+    glPopMatrix();
+
+    // Raised ridge makes the roof silhouette unmistakable from a distance.
+    drawBox(x, y + 0.48f + rise, z, 0.72f, 0.34f, roofD + 0.12f,
+            0.30f, 0.16f, 0.10f);
 }
 
 static void addHouse(float cx, float cz, float rotation = 0.0f)
@@ -1593,9 +1725,10 @@ static void addHouse(float cx, float cz, float rotation = 0.0f)
     addPart(0.0f, D*0.5f, W, H, T);
     addPart(-W*0.5f, 0.0f, T, H, D);
     addPart( W*0.5f, 0.0f, T, H, D);
-    // Roof collision keeps enemies from shooting straight down while
-    // preserving a comfortable interior height.
-    addPart(0.0f, 0.0f, W+0.35f, 0.45f, D+0.35f);
+    // Dedicated roof: the old generic addPart() placed this at sy*0.5,
+    // burying it at ground level.
+    g_objects.push_back({OBJECT_HOUSE_ROOF, cx, H + 0.22f, cz,
+                         W + 0.35f, 0.45f, D + 0.35f, true});
 
     // Door lintel above the entrance.
     addPart(0.0f, -D*0.5f, DOOR, 1.4f, T);
@@ -1804,9 +1937,15 @@ static bool enemyHasLineOfSight(const Enemy& e)
     dx/=len; dy/=len; dz/=len;
     for(const auto& o:g_objects)
     {
-        if(!o.active || o.world != g_world || o.type==OBJECT_AMMO || o.type==OBJECT_MEDKIT) continue;
+        if(!o.active || o.world != g_world || o.type==OBJECT_AMMO || o.type==OBJECT_ROCKET_AMMO || o.type==OBJECT_MEDKIT) continue;
         float hitT=len;
         if(rayAABB(ox,oy,oz,dx,dy,dz,o.x,o.y,o.z,o.sx*0.5f,o.sy*0.5f,o.sz*0.5f,hitT) && hitT<len-0.1f) return false;
+    }
+    for (const auto& wo : g_otherWorldObjects)
+    {
+        float hitT=len;
+        if (rayOtherWorldObject(ox,oy,oz,dx,dy,dz,wo,hitT) && hitT<len-0.1f)
+            return false;
     }
     float terrainT=len;
     if(rayTerrainHit(ox,oy,oz,dx,dy,dz,len,terrainT) && terrainT<len-0.1f) return false;
@@ -1861,7 +2000,11 @@ static void damagePlayer(float damage)
 
 static void switchWeapon(int index)
 {
-    if (index < 0 || index > 2)
+    if (index < 0 || index >= 4)
+        return;
+
+    // The rocket launcher exists only in the ocean world.
+    if (index == WEAPON_ROCKET && g_world != WORLD_OCEAN)
         return;
 
     g_currentWeapon = index;
@@ -1961,6 +2104,14 @@ static void shoot()
     if (w.reloadTimer > 0.0f)
         return;
 
+    if (g_currentWeapon == WEAPON_ROCKET)
+    {
+        if (g_world != WORLD_OCEAN) { g_currentWeapon=WEAPON_PISTOL; g_message="ROCKET LAUNCHER IS ONLY AVAILABLE IN THE OCEAN WORLD"; return; }
+        if (w.cooldown > 0.0f) return;
+        if (w.ammo <= 0) { reloadWeapon(); return; }
+        w.ammo--; w.cooldown=w.fireDelay; g_weaponRecoil=w.recoil; g_muzzleFlash=1.0f; spawnPlayerRocket(); g_message="ROCKET FIRED"; return;
+    }
+
     if (w.cooldown > 0.0f)
         return;
 
@@ -2021,9 +2172,30 @@ static void shoot()
         dz /= len;
 
         float bestT = w.range;
+        bool interceptedRocket = false;
+        int interceptedRocketIndex = -1;
+        float interceptedRocketT = w.range;
         float terrainT = w.range;
+
+        // Find the nearest incoming submarine rocket along this shot ray.
+        // We decide whether it is actually intercepted only after checking
+        // terrain/cover/enemies, so a wall or enemy in front of the rocket
+        // correctly consumes the shot first.
+        for (int ri = 0; ri < (int)g_projectiles.size(); ++ri)
+        {
+            const auto& rp = g_projectiles[ri];
+            if (!rp.active || !rp.heavyRocket || rp.playerRocket) continue;
+            float rocketT = w.range;
+            if (raySphere(g_px,shotOriginY,g_pz,dx,dy,dz,
+                          rp.x,rp.y,rp.z,rp.radius + 0.45f,rocketT) &&
+                rocketT < interceptedRocketT)
+            {
+                interceptedRocketT = rocketT;
+                interceptedRocketIndex = ri;
+            }
+        }
         if (rayTerrainHit(g_px,shotOriginY,g_pz,dx,dy,dz,w.range,terrainT) && terrainT > 0.02f)
-            bestT = terrainT;
+            bestT = std::min(bestT, terrainT);
 
         int bestEnemy = -1;
         bool bestHeadshot = false;
@@ -2035,6 +2207,7 @@ static void shoot()
                 continue;
 
             if (o.type == OBJECT_AMMO ||
+                o.type == OBJECT_ROCKET_AMMO ||
                 o.type == OBJECT_MEDKIT)
                 continue;
 
@@ -2064,18 +2237,25 @@ static void shoot()
             }
         }
 
+        for (const auto& wo : g_otherWorldObjects)
+        {
+            float t;
+            if (rayOtherWorldObject(g_px,shotOriginY,g_pz,dx,dy,dz,wo,t) && t < bestT)
+                bestT=t;
+        }
+
         // enemies
         for (size_t i = 0; i < g_enemies.size(); ++i)
         {
             Enemy& e = g_enemies[i];
-            if (!e.alive)
+            if (!e.alive || e.world != g_world)
                 continue;
 
             const float baseY = e.type == ENEMY_DRONE ? e.y - 0.65f : terrainSupportHeight(e.x,e.z,e.radius);
-            const float bodyHeight = (e.type == ENEMY_TANK) ? 2.35f : (e.type == ENEMY_DRONE ? 0.95f : 1.75f);
-            const float bodyRadius = (e.type == ENEMY_TANK) ? 0.82f : (e.type == ENEMY_DRONE ? 0.55f : e.radius + 0.05f);
+            const float bodyHeight = (e.type == ENEMY_TANK) ? 3.40f : (e.type == ENEMY_DRONE ? 0.95f : 1.75f);
+            const float bodyRadius = (e.type == ENEMY_TANK) ? 1.30f : (e.type == ENEMY_DRONE ? 0.55f : e.radius + 0.05f);
             const float headCenterY = (e.type == ENEMY_DRONE) ? (baseY + 1.30f) : (baseY + bodyHeight + 0.28f);
-            const float headRadius = (e.type == ENEMY_TANK) ? 0.52f : (e.type == ENEMY_DRONE ? 0.28f : 0.36f);
+            const float headRadius = (e.type == ENEMY_TANK) ? 0.68f : (e.type == ENEMY_DRONE ? 0.28f : 0.36f);
             float bodyT = w.range, headT = w.range;
             const bool hitBody = rayAABB(g_px,shotOriginY,g_pz,dx,dy,dz,
                                          e.x,baseY+bodyHeight*0.5f,e.z,
@@ -2093,6 +2273,28 @@ static void shoot()
                 bestEnemy = (int)i;
                 bestHeadshot = enemyHeadshot;
             }
+        }
+
+        // A rocket can be shot down only when it is the first hittable thing
+        // along the ray.
+        if (interceptedRocketIndex >= 0 && interceptedRocketT < bestT)
+            interceptedRocket = true;
+
+        if (interceptedRocket)
+        {
+            if (interceptedRocketIndex >= 0 &&
+                interceptedRocketIndex < (int)g_projectiles.size())
+            {
+                auto& rp = g_projectiles[interceptedRocketIndex];
+                if (rp.active && rp.heavyRocket)
+                {
+                    rp.active = false;
+                    spawnExplosion(rp.x,rp.y,rp.z,4.5f,0.0f,false,false);
+                    g_hitMarker = 1.0f;
+                    g_message = "ENEMY ROCKET DESTROYED!";
+                }
+            }
+            continue;
         }
 
         if (bestEnemy >= 0)
@@ -2375,7 +2577,8 @@ static void createWorld()
         }
     }
 
-    // Snap surviving world objects to the actual terrain surface.
+    // Snap surviving world objects to the actual terrain surface.  Roofs are
+    // special: their Y is the top of the house, not the normal ground center.
     for (auto& o : g_objects)
     {
         const bool wall = fabsf(o.x) > ARENA - 0.01f || fabsf(o.z) > ARENA - 0.01f;
@@ -2384,7 +2587,10 @@ static void createWorld()
             const float support = isTunnelZone(o.x,o.z)
                 ? tunnelFloorHeight(o.x,o.z)
                 : terrainSupportHeight(o.x, o.z, std::max(o.sx, o.sz) * 0.5f);
-            o.y = support + o.sy * 0.5f;
+            if (o.type == OBJECT_HOUSE_ROOF)
+                o.y = support + 5.5f + 0.25f;
+            else
+                o.y = support + o.sy * 0.5f;
         }
     }
     // Dense procedural vegetation and biome-specific decorations are generated
@@ -2536,6 +2742,10 @@ static void resetGame()
 
     g_onGround = true;
     g_inTunnel = false;
+    g_jetpackEnabled = false;
+    g_jetpackFuel = JETPACK_MAX_FUEL;
+    g_jetpackHeat = 0.0f;
+    g_jetpackFxTimer = 0.0f;
 
     g_health = 100.0f;
 
@@ -2555,8 +2765,9 @@ static void resetGame()
     g_firstMouse = true;
 
     g_storyStage = 0;
+    g_storyObjective = 0;
 
-    g_storyTimer = 8.0f;
+    g_storyTimer = 2.5f;
 
     g_message =
         "MISSION: SURVIVE AND ELIMINATE THE HOSTILES";
@@ -2564,7 +2775,7 @@ static void resetGame()
     g_currentWeapon =
         WEAPON_PISTOL;
 
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < 4; ++i)
     {
         g_weapons[i].ammo =
             g_weapons[i].magazineSize;
@@ -2575,9 +2786,18 @@ static void resetGame()
     }
 
     g_projectiles.clear();
+    g_explosions.clear();
 
     // Recreate pickups and world objects on restart.
     createWorld();
+    for(int i=0;i<24;++i)
+    {
+        const float a=(2.0f*(float)M_PI*i)/24.0f;
+        const float r=90.0f+22.0f*(i%5);
+        const float x=cosf(a+0.09f*(i%3))*r;
+        const float z=sinf(a+0.07f*(i%4))*r;
+        g_objects.push_back({OBJECT_ROCKET_AMMO,x,0.5f,z,1.25f,0.95f,1.05f,true,WORLD_OCEAN});
+    }
     createWorldPortals();
     createOtherWorldObjects();
     createOceanSubmarines();
@@ -2617,6 +2837,69 @@ static void resetGame()
 // ============================================================
 // UPDATE PLAYER
 // ============================================================
+
+static void setJetpack(bool enabled)
+{
+    if (enabled && g_jetpackFuel <= 0.5f)
+    {
+        g_message = "JETPACK: NO FUEL";
+        g_jetpackEnabled = false;
+        return;
+    }
+    g_jetpackEnabled = enabled;
+    if (enabled)
+        g_message = "JETPACK ONLINE - SPACE TO THRUST";
+    else
+        g_message = "JETPACK OFFLINE";
+}
+
+static void updateJetpack(float dt)
+{
+    const bool thrust = glfwGetKey(g_window, GLFW_KEY_SPACE) == GLFW_PRESS;
+    if (g_jetpackEnabled)
+    {
+        if (thrust && g_jetpackFuel > 0.0f)
+        {
+            g_jetpackFuel = std::max(0.0f, g_jetpackFuel - JETPACK_DRAIN * dt);
+            g_jetpackHeat = clampf(g_jetpackHeat + 1.7f * dt, 0.0f, 1.0f);
+            g_jetpackFxTimer += dt;
+            g_vy = std::min(JETPACK_MAX_UP_SPEED, g_vy + JETPACK_THRUST * dt);
+            g_onGround = false;
+            if (g_jetpackFuel <= 0.0f)
+            {
+                g_jetpackEnabled = false;
+                g_message = "JETPACK EMPTY - LAND TO RECHARGE";
+            }
+        }
+        else
+        {
+            g_jetpackHeat = std::max(0.0f, g_jetpackHeat - 2.5f * dt);
+        }
+    }
+    else
+    {
+        g_jetpackHeat = std::max(0.0f, g_jetpackHeat - 3.0f * dt);
+    }
+
+    if (g_onGround && !g_jetpackEnabled)
+        g_jetpackFuel = std::min(JETPACK_MAX_FUEL, g_jetpackFuel + JETPACK_RECHARGE * dt);
+}
+
+static void drawJetpackFlames()
+{
+    if (!g_jetpackEnabled || g_jetpackFuel <= 0.0f) return;
+    const float pulse = 0.72f + 0.28f * sinf(g_gameTime * 30.0f);
+    glPushMatrix();
+    glLoadIdentity();
+    glTranslatef(0.0f, -0.56f, -0.82f);
+    const float flame = (glfwGetKey(g_window, GLFW_KEY_SPACE) == GLFW_PRESS) ? 0.22f * pulse : 0.06f;
+    if (flame > 0.0f)
+    {
+        drawBox(-0.11f, 0.0f, 0.0f, flame, flame * 1.8f, flame, 1.0f, 0.38f, 0.04f);
+        drawBox( 0.11f, 0.0f, 0.0f, flame, flame * 1.8f, flame, 1.0f, 0.62f, 0.06f);
+    }
+    glPopMatrix();
+}
 
 static void updatePlayer(float dt)
 {
@@ -2678,14 +2961,14 @@ static void updatePlayer(float dt)
         mx /= len;
         mz /= len;
 
-        float speed = 6.0f;
+        float speed = g_jetpackEnabled ? JETPACK_AIR_CONTROL : 6.0f;
 
         if (glfwGetKey(
                 g_window,
                 GLFW_KEY_LEFT_SHIFT)
             == GLFW_PRESS)
         {
-            speed = 9.0f;
+            speed = g_jetpackEnabled ? 12.5f : 9.0f;
         }
 
         // Underground corridors are always three times faster, including
@@ -2798,12 +3081,11 @@ static void updatePlayer(float dt)
             GLFW_KEY_SPACE)
         == GLFW_PRESS;
 
-    if (space &&
+    if (!g_jetpackEnabled && space &&
         !previousSpace &&
         g_onGround)
     {
         g_vy = JUMP_SPEED;
-
         g_onGround = false;
     }
 
@@ -2819,7 +3101,10 @@ static void updatePlayer(float dt)
     }
     else
     {
-        g_vy -= GRAVITY * dt;
+        if (!g_jetpackEnabled)
+            g_vy -= GRAVITY * dt;
+        else
+            g_vy -= GRAVITY * 0.32f * dt;
         g_py += g_vy * dt;
 
         // Landing: never allow the player's feet below the actual floor.
@@ -2843,6 +3128,61 @@ static void updatePlayer(float dt)
                 g_vy = 0.0f;
         }
     }
+}
+
+static void spawnExplosion(float x,float y,float z,float radius,float damage,bool hurtPlayer,bool hurtSubs)
+{
+    Explosion ex{}; ex.x=x; ex.y=y; ex.z=z; ex.age=0.0f; ex.life=0.55f; ex.radius=0.8f; ex.maxRadius=radius;
+    g_explosions.push_back(ex);
+    if (hurtPlayer && g_deadTimer<=0.0f)
+    {
+        const float d=sqrtf((g_px-x)*(g_px-x)+(g_py+0.9f-y)*(g_py+0.9f-y)+(g_pz-z)*(g_pz-z));
+        if(d<=radius){ const float f=clampf(1.0f-d/std::max(radius,0.01f),0.20f,1.0f); damagePlayer(damage*f); }
+    }
+    if(hurtSubs && g_world==WORLD_OCEAN)
+    {
+        for(auto& sub:g_oceanSubmarines)
+        {
+            if(!sub.active) continue;
+            const float d=sqrtf((sub.x-x)*(sub.x-x)+(sub.y-y)*(sub.y-y)+(sub.z-z)*(sub.z-z));
+            const float hitR=radius+15.0f;
+            if(d<=hitR){ const float f=clampf(1.0f-d/std::max(hitR,0.01f),0.25f,1.0f); sub.hp-=damage*f; if(sub.hp<=0.0f){sub.hp=0.0f;sub.active=false;g_score+=1200;g_kills++;g_message="SUBMARINE DESTROYED!";} }
+        }
+    }
+    if(hurtSubs)
+    {
+        for(auto& e:g_enemies)
+        {
+            if(!e.alive || e.world!=g_world) continue;
+            const float ey=(e.type==ENEMY_DRONE)?e.y:terrainSupportHeight(e.x,e.z,e.radius)+1.0f;
+            const float d=sqrtf((e.x-x)*(e.x-x)+(ey-y)*(ey-y)+(e.z-z)*(e.z-z));
+            if(d<=radius){ const float f=clampf(1.0f-d/std::max(radius,0.01f),0.15f,1.0f); e.hp-=damage*0.75f*f; e.hitFlash=1.0f; if(e.hp<=0.0f){e.hp=0.0f;e.alive=false;e.respawn=4.0f;g_score+=e.type==ENEMY_TANK?300:(e.type==ENEMY_FAST?150:100);g_kills++;} }
+        }
+    }
+}
+static void updateExplosions(float dt)
+{
+    for(auto& ex:g_explosions){ ex.age+=dt; const float t=clampf(ex.age/std::max(ex.life,0.001f),0.0f,1.0f); ex.radius=0.8f+(ex.maxRadius-0.8f)*t; }
+    g_explosions.erase(std::remove_if(g_explosions.begin(),g_explosions.end(),[](const Explosion& ex){return ex.age>=ex.life;}),g_explosions.end());
+}
+static void drawExplosions()
+{
+    glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA,GL_ONE); glDisable(GL_DEPTH_TEST);
+    for(const auto& ex:g_explosions){
+        const float t=clampf(ex.age/std::max(ex.life,0.001f),0.0f,1.0f), a=0.78f*(1.0f-t), r=ex.radius;
+        glColor4f(1.0f,0.22f,0.03f,a); glBegin(GL_QUADS);
+        glVertex3f(ex.x-r,ex.y,ex.z-r*0.35f); glVertex3f(ex.x+r,ex.y,ex.z-r*0.35f); glVertex3f(ex.x+r,ex.y,ex.z+r*0.35f); glVertex3f(ex.x-r,ex.y,ex.z+r*0.35f);
+        glVertex3f(ex.x-r*0.35f,ex.y-r*0.35f,ex.z-r); glVertex3f(ex.x+r*0.35f,ex.y-r*0.35f,ex.z-r); glVertex3f(ex.x+r*0.35f,ex.y+r*0.35f,ex.z+r); glVertex3f(ex.x-r*0.35f,ex.y+r*0.35f,ex.z+r); glEnd();
+        glColor4f(1.0f,0.72f,0.08f,a); drawBox(ex.x,ex.y,ex.z,r*0.7f,r*0.7f,r*0.7f,1.0f,0.42f,0.04f);
+    }
+    glEnable(GL_DEPTH_TEST); glDisable(GL_BLEND);
+}
+static void spawnPlayerRocket()
+{
+    if(g_world!=WORLD_OCEAN) return;
+    const float oy=g_py+EYE_HEIGHT-0.15f; float dx=cosf(g_pitch)*sinf(g_yaw),dy=sinf(g_pitch),dz=-cosf(g_pitch)*cosf(g_yaw);
+    const float len=sqrtf(dx*dx+dy*dy+dz*dz); if(len<0.001f) return; dx/=len;dy/=len;dz/=len;
+    Projectile p{}; p.x=g_px;p.y=oy;p.z=g_pz;p.dx=dx;p.dy=dy;p.dz=dz;p.speed=55.0f;p.damage=140.0f;p.active=true;p.playerRocket=true;p.radius=0.75f;p.explosionRadius=18.0f;g_projectiles.push_back(p);
 }
 
 static void spawnEnemyProjectile(const Enemy& e)
@@ -2913,6 +3253,37 @@ static void updateEnemyProjectiles(float dt)
         p.y += p.dy * step;
         p.z += p.dz * step;
 
+        if (p.playerRocket && g_world==WORLD_OCEAN)
+        {
+            bool hitSub=false;
+            for(auto& sub:g_oceanSubmarines)
+            {
+                if(!sub.active) continue;
+                const bool hullHit =
+                    segmentSphereHit(oldX,oldY,oldZ,p.x,p.y,p.z,
+                                     sub.x,sub.y,sub.z,19.0f);
+                const bool noseHit =
+                    segmentSphereHit(oldX,oldY,oldZ,p.x,p.y,p.z,
+                                     sub.x,sub.y,sub.z + 19.0f,9.0f);
+                const bool rearHit =
+                    segmentSphereHit(oldX,oldY,oldZ,p.x,p.y,p.z,
+                                     sub.x,sub.y,sub.z - 19.0f,9.0f);
+                const bool towerHit =
+                    segmentSphereHit(oldX,oldY,oldZ,p.x,p.y,p.z,
+                                     sub.x,sub.y + 5.0f,sub.z,7.0f);
+                if(hullHit || noseHit || rearHit || towerHit)
+                {
+                    spawnExplosion(p.x,p.y,p.z,p.explosionRadius,p.damage,false,true);
+                    p.active=false;
+                    hitSub=true;
+                    g_hitMarker=1.0f;
+                    g_message="SUBMARINE HIT!";
+                    break;
+                }
+            }
+            if(hitSub) continue;
+        }
+
         const bool inTunnel = isTunnelZone(p.x, p.z);
         const float floorY = currentFloorHeight(p.x,p.z);
         const float ceilingY = inTunnel
@@ -2922,8 +3293,9 @@ static void updateEnemyProjectiles(float dt)
             p.z < -ARENA - 2.0f || p.z > ARENA + 2.0f ||
             p.y < floorY + 0.05f || p.y > ceilingY - 0.05f)
         {
-            p.active = false;
-            continue;
+            if(p.heavyRocket || p.playerRocket)
+                spawnExplosion(p.x,p.y,p.z,p.explosionRadius>0.0f?p.explosionRadius:10.0f,p.damage*0.70f,p.heavyRocket,false);
+            p.active=false; continue;
         }
 
         const float vx = p.x - oldX;
@@ -2936,7 +3308,7 @@ static void updateEnemyProjectiles(float dt)
         {
             for (const auto& o : g_objects)
             {
-                if (!o.active || o.type == OBJECT_AMMO || o.type == OBJECT_MEDKIT)
+                if (!o.active || o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT)
                     continue;
 
                 float hitT = 0.0f;
@@ -2954,21 +3326,40 @@ static void updateEnemyProjectiles(float dt)
             }
         }
 
+        if (!p.heavyRocket && !blocked && segLen > 0.0001f)
+        {
+            for (const auto& wo : g_otherWorldObjects)
+            {
+                float hitT=0.0f;
+                if (rayOtherWorldObject(oldX,oldY,oldZ,
+                                        vx/segLen,vy/segLen,vz/segLen,wo,hitT) &&
+                    hitT <= segLen)
+                {
+                    blocked=true;
+                    break;
+                }
+            }
+        }
+
         if (!p.heavyRocket && !blocked && tunnelWallHitSegment(oldX,oldY,oldZ,p.x,p.y,p.z))
             blocked = true;
 
         if (blocked)
         {
-            p.active = false;
-            continue;
+            if(p.heavyRocket || p.playerRocket)
+                spawnExplosion(p.x,p.y,p.z,p.explosionRadius>0.0f?p.explosionRadius:10.0f,p.damage*0.70f,p.heavyRocket,p.playerRocket);
+            p.active=false; continue;
         }
 
         if (g_deadTimer <= 0.0f &&
             segmentSphereHit(oldX, oldY, oldZ, p.x, p.y, p.z,
                              g_px, playerY, g_pz, p.heavyRocket ? 1.15f : 0.55f))
         {
-            damagePlayer(p.damage);
-            p.active = false;
+            if(p.heavyRocket)
+                spawnExplosion(p.x,p.y,p.z,p.explosionRadius>0.0f?p.explosionRadius:10.0f,p.damage,true,false);
+            else
+                damagePlayer(p.damage);
+            p.active=false;
         }
     }
 
@@ -3164,21 +3555,25 @@ static void updatePickups()
             continue;
 
         if (o.type != OBJECT_AMMO &&
+            o.type != OBJECT_ROCKET_AMMO &&
             o.type != OBJECT_MEDKIT)
             continue;
 
-        float d =
-            distance2D(
-                g_px,
-                g_pz,
-                o.x,
-                o.z
-            );
+        const float dx = g_px - o.x;
+        const float dy = (g_py + 0.9f) - o.y;
+        const float dz = g_pz - o.z;
+        const float d = sqrtf(dx*dx + dy*dy + dz*dz);
 
-        if (d > 1.5f)
+        if (d > 2.25f)
             continue;
 
-        if (o.type == OBJECT_AMMO)
+        if (o.type == OBJECT_ROCKET_AMMO)
+        {
+            g_weapons[WEAPON_ROCKET].reserve += 3;
+            g_message = "ROCKET AMMO +3";
+            o.active = false;
+        }
+        else if (o.type == OBJECT_AMMO)
         {
             for (int i = 0; i < 3; ++i)
             {
@@ -3253,7 +3648,7 @@ static void updateGame(float dt)
             g_weaponRecoil = 0.0f;
     }
 
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < 4; ++i)
     {
         if (g_weapons[i].cooldown > 0.0f)
         {
@@ -3295,12 +3690,20 @@ static void updateGame(float dt)
         return;
     }
 
+    static bool prevF = false;
+    const bool keyF = glfwGetKey(g_window, GLFW_KEY_F) == GLFW_PRESS;
+    if (keyF && !prevF)
+        setJetpack(!g_jetpackEnabled);
+    prevF = keyF;
+
+    updateJetpack(dt);
     updatePlayer(dt);
     updateWorldPortals();
     updateOceanSubmarines(dt);
 
     updateEnemies(dt);
     updateEnemyProjectiles(dt);
+    updateExplosions(dt);
 
     updatePickups();
 
@@ -3344,6 +3747,16 @@ static void updateGame(float dt)
         );
     }
 
+    // Rocket launcher: key 4, available only in the ocean world.
+    static bool prev4 = false;
+    const bool key4 = glfwGetKey(g_window, GLFW_KEY_4) == GLFW_PRESS;
+    if (key4 && !prev4 && g_world == WORLD_OCEAN)
+        switchWeapon(WEAPON_ROCKET);
+    prev4 = key4;
+
+    if (g_world != WORLD_OCEAN && g_currentWeapon == WEAPON_ROCKET)
+        switchWeapon(WEAPON_PISTOL);
+
     static bool prevR = false;
 
     bool r =
@@ -3357,35 +3770,15 @@ static void updateGame(float dt)
 
     prevR = r;
 
-    // story
+    // Expanded campaign story. Each beat provides a transmission and a concrete objective.
     g_storyTimer -= dt;
-
-    if (g_storyTimer <= 0.0f)
+    if (g_storyTimer <= 0.0f && g_storyStage < STORY_BEAT_COUNT)
     {
+        const StoryBeat& beat = g_storyBeats[g_storyStage];
+        g_message = beat.transmission;
+        g_storyObjective = g_storyStage;
         g_storyStage++;
-
-        g_storyTimer = 18.0f;
-
-        if (g_storyStage == 1)
-        {
-            g_message =
-                "COMMAND: HOSTILE REINFORCEMENTS DETECTED.";
-        }
-        else if (g_storyStage == 2)
-        {
-            g_message =
-                "COMMAND: FIND THE SUPPLY CRATES.";
-        }
-        else if (g_storyStage == 3)
-        {
-            g_message =
-                "COMMAND: HEAVY UNIT APPROACHING.";
-        }
-        else if (g_storyStage == 4)
-        {
-            g_message =
-                "COMMAND: HOLD THE POSITION.";
-        }
+        g_storyTimer = (g_storyStage >= STORY_BEAT_COUNT) ? 9999.0f : 20.0f;
     }
 }
 
@@ -3396,6 +3789,7 @@ static void updateGame(float dt)
 static void drawSky()
 {
     glDisable(GL_DEPTH_TEST);
+    glDisable(GL_FOG);
     const float day=terrainDayFactor();
     glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity();
     glMatrixMode(GL_MODELVIEW); glPushMatrix(); glLoadIdentity();
@@ -3407,6 +3801,7 @@ static void drawSky()
     glEnd();
     glPopMatrix(); glMatrixMode(GL_PROJECTION); glPopMatrix(); glMatrixMode(GL_MODELVIEW);
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_FOG);
 }
 
 static void drawWorldStarField()
@@ -3602,6 +3997,65 @@ static void seedWorldEnemies(int world)
     g_world = oldWorld;
 }
 
+static bool portalDestinationClear(int world, float x, float z, float radius)
+{
+    // Never place the player in a building, roof volume, tree, skyscraper,
+    // crate or other solid object.  Pickups are intentionally ignored.
+    for (const auto& o : g_objects)
+    {
+        if (!o.active || o.world != world) continue;
+        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT) continue;
+        const float hx = o.sx * 0.5f + radius;
+        const float hz = o.sz * 0.5f + radius;
+        if (fabsf(x - o.x) <= hx && fabsf(z - o.z) <= hz)
+            return false;
+    }
+
+    for (const auto& o : g_otherWorldObjects)
+    {
+        if (o.world != world) continue;
+        if (distance2D(x,z,o.x,o.z) <= radius + o.radius)
+            return false;
+    }
+
+    // Also avoid tunnel bores and entrances; spawning on top of a tunnel
+    // mouth can otherwise put the player below the visible surface.
+    if (world == WORLD_MAIN && isTunnelZone(x,z))
+        return false;
+
+    return true;
+}
+
+static bool findSafePortalDestination(int world, float preferredX, float preferredZ,
+                                      float radius, float& outX, float& outZ)
+{
+    if (portalDestinationClear(world, preferredX, preferredZ, radius))
+    {
+        outX = preferredX;
+        outZ = preferredZ;
+        return true;
+    }
+
+    // Search in expanding rings around the intended pad. This also handles
+    // future map additions without hard-coding one fragile return position.
+    for (int ring = 1; ring <= 24; ++ring)
+    {
+        const float r = ring * 10.0f;
+        for (int i = 0; i < 32; ++i)
+        {
+            const float a = (2.0f * (float)M_PI * i) / 32.0f;
+            const float x = preferredX + cosf(a) * r;
+            const float z = preferredZ + sinf(a) * r;
+            if (fabsf(x) > ARENA - 6.0f || fabsf(z) > ARENA - 6.0f) continue;
+            if (!portalDestinationClear(world, x, z, radius)) continue;
+            outX = x;
+            outZ = z;
+            return true;
+        }
+    }
+    return false;
+}
+
 static void enterWorldPortal(const WorldPortal& p)
 {
     g_world = p.targetWorld;
@@ -3617,6 +4071,20 @@ static void enterWorldPortal(const WorldPortal& p)
             dz += 22.0f;
         }
     }
+
+    // Final safety check for every inter-world teleport. If the target pad is
+    // occupied by a house, roof, tree, landmark or tunnel, move to the nearest
+    // clear point instead of spawning inside geometry.
+    float safeX = dx, safeZ = dz;
+    if (!findSafePortalDestination(g_world, dx, dz, PLAYER_RADIUS + 0.8f, safeX, safeZ))
+    {
+        // Extremely defensive fallback: place the player at the origin only
+        // if it is actually clear.
+        safeX = 0.0f;
+        safeZ = 0.0f;
+    }
+    dx = safeX;
+    dz = safeZ;
 
     g_px = dx;
     g_pz = dz;
@@ -3643,7 +4111,9 @@ static void updateWorldPortals()
                 const float pz = sinf(a + (g_world == WORLD_WINTER ? 0.18f : 0.0f)) * r;
                 if (distance2D(g_px,g_pz,px,pz) <= 4.2f + 1.2f)
                 {
-                    WorldPortal back{px,pz,WORLD_MAIN,0.0f,0.0f,4.2f};
+                    float returnX = 0.0f, returnZ = 0.0f;
+                    findSafePortalDestination(WORLD_MAIN, 0.0f, 0.0f, PLAYER_RADIUS + 0.8f, returnX, returnZ);
+                    WorldPortal back{px,pz,WORLD_MAIN,returnX,returnZ,4.2f};
                     enterWorldPortal(back);
                     break;
                 }
@@ -3838,6 +4308,10 @@ static void createCityBiome()
 
 static void drawDecor()
 {
+    // Vegetation/decor is exclusive to the main world.  The decor list is
+    // generated once, so without this guard it would visually follow the
+    // player into the ocean/winter worlds after a portal transition.
+    if (g_world != WORLD_MAIN) return;
     for (const auto& d : g_decor)
     {
         const float dx=d.x-g_px, dz=d.z-g_pz;
@@ -4148,6 +4622,10 @@ static void drawWorld()
         {
             drawBuildingWall(o);
         }
+        else if (o.type == OBJECT_HOUSE_ROOF)
+        {
+            drawHouseRoof(o.x, o.y, o.z, o.sx, o.sz);
+        }
         else if (o.type == OBJECT_SKYSCRAPER)
         {
             drawSkyscraper(o);
@@ -4166,6 +4644,10 @@ static void drawWorld()
         else if (o.type == OBJECT_AMMO)
         {
             drawAmmo(o.x, o.y - o.sy * 0.5f, o.z);
+        }
+        else if (o.type == OBJECT_ROCKET_AMMO)
+        {
+            drawRocketAmmo(o.x, o.y - o.sy * 0.5f, o.z);
         }
         else if (o.type == OBJECT_MEDKIT)
         {
@@ -4191,7 +4673,7 @@ static void createOceanSubmarines()
         sub.orbitRadius = 310.0f + 28.0f * (i % 2);
         sub.phase = a;
         sub.rocketCooldown = 1.2f + 0.55f * i;
-        sub.hp = 260.0f;
+        sub.hp = 1600.0f;
         sub.active = true;
         g_oceanSubmarines.push_back(sub);
     }
@@ -4217,6 +4699,7 @@ static void spawnOceanSubmarineRocket(const OceanSubmarine& s)
     p.active = true;
     p.heavyRocket = true;
     p.radius = 0.65f;
+    p.explosionRadius = 11.0f;
     g_projectiles.push_back(p);
 }
 
@@ -4290,6 +4773,16 @@ static void drawOceanSubmarines()
         drawBox(-5.5f,-4.0f,5.0f,2.8f,2.0f,7.0f,0.12f,0.10f,0.09f);
         drawBox( 5.5f,-4.0f,5.0f,2.8f,2.0f,7.0f,0.12f,0.10f,0.09f);
         glPopMatrix();
+
+        const float hp=clampf(s.hp/1600.0f,0.0f,1.0f);
+        glPushMatrix();
+        glTranslatef(s.x,s.y+7.0f,s.z);
+        glRotatef(-g_yaw*180.0f/(float)M_PI,0,1,0);
+        glRotatef(g_pitch*180.0f/(float)M_PI,1,0,0);
+        glBegin(GL_QUADS);
+        glColor3f(0.03f,0.03f,0.04f); glVertex3f(-8,0,0);glVertex3f(8,0,0);glVertex3f(8,0.35f,0);glVertex3f(-8,0.35f,0);
+        glColor3f(0.82f,0.12f,0.08f); const float fill=15.6f*hp; glVertex3f(-7.8f,0.05f,0.02f);glVertex3f(-7.8f+fill,0.05f,0.02f);glVertex3f(-7.8f+fill,0.28f,0.02f);glVertex3f(-7.8f,0.28f,0.02f);
+        glEnd(); glPopMatrix();
     }
 }
 
@@ -4337,8 +4830,8 @@ static void drawEnemies()
         if(edx*edx+edz*edz > ENEMY_RENDER_DISTANCE*ENEMY_RENDER_DISTANCE) continue;
         const bool drone = e.type == ENEMY_DRONE;
         const float baseY = drone ? e.y - 0.65f : terrainSupportHeight(e.x, e.z, e.radius);
-        const float bodyHeight = (e.type == ENEMY_TANK) ? 2.35f : (drone ? 1.3f : 1.75f);
-        const float bodyWidth = (e.type == ENEMY_TANK) ? 1.65f : (drone ? 1.15f : 0.95f);
+        const float bodyHeight = (e.type == ENEMY_TANK) ? 3.40f : (drone ? 1.3f : 1.75f);
+        const float bodyWidth = (e.type == ENEMY_TANK) ? 2.55f : (drone ? 1.15f : 0.95f);
         float br=0.58f,bg=0.12f,bb=0.08f;
         if (e.type == ENEMY_FAST){br=0.95f;bg=0.44f;bb=0.05f;}
         if (e.type == ENEMY_TANK){br=0.33f;bg=0.08f;bb=0.68f;}
@@ -4374,9 +4867,11 @@ static void drawEnemies()
         }
         else if (e.type == ENEMY_TANK)
         {
-            // Proper tank silhouette: hull, tracks, rotating turret and long gun.
-            // The whole vehicle follows e.yaw, so tanks visibly turn into the
-            // direction they are driving instead of sliding sideways.
+            // Enlarged heavy tank silhouette.  Keep the complete vehicle in a
+            // single local transform so every turret/track detail scales with
+            // the same factor and stays aligned with its hitbox.
+            glPushMatrix();
+            glScalef(1.65f,1.65f,1.65f);
             drawBox(0.0f, 0.62f, 0.0f, 2.15f, 0.72f, 2.85f, br, bg, bb);
             drawBox(-1.02f, 0.48f, 0.0f, 0.42f, 0.62f, 2.65f, 0.12f, 0.10f, 0.15f);
             drawBox( 1.02f, 0.48f, 0.0f, 0.42f, 0.62f, 2.65f, 0.12f, 0.10f, 0.15f);
@@ -4387,16 +4882,96 @@ static void drawEnemies()
             for (int side = -1; side <= 1; side += 2)
                 for (int k = -1; k <= 1; ++k)
                     drawBox(side*1.25f, 0.47f, k*0.78f, 0.08f, 0.30f, 0.42f, 0.05f,0.05f,0.06f);
+            glPopMatrix();
         }
         else
         {
-            const float headY=bodyHeight+0.28f;
-            drawBox(0.0f,bodyHeight*0.5f,0.0f,bodyWidth,bodyHeight,bodyWidth,br,bg,bb);
-            drawBox(0.0f,headY,0.0f,bodyWidth*0.65f,0.54f,bodyWidth*0.65f,br*0.92f,bg*0.92f,bb*0.92f);
-            drawBox(0.0f,headY-0.04f,-bodyWidth*0.34f,bodyWidth*0.48f,0.20f,bodyWidth*0.14f,0.72f,0.84f,0.92f);
-            drawBox(-bodyWidth*0.56f,bodyHeight*0.55f,0.0f,0.20f,bodyHeight*0.52f,0.28f,br*0.78f,bg*0.78f,bb*0.78f);
-            drawBox(bodyWidth*0.56f,bodyHeight*0.55f,0.0f,0.20f,bodyHeight*0.52f,0.28f,br*0.78f,bg*0.78f,bb*0.78f);
-            drawBox(bodyWidth*0.35f,1.20f,-0.55f,0.14f,0.14f,1.1f,0.10f,0.11f,0.13f);
+            // Detailed humanoid combat model: torso armor, helmet, visor,
+            // shoulders, arms, legs, boots, backpack and a forward weapon.
+            const float headY = bodyHeight + 0.30f;
+            const float torsoW = bodyWidth * 0.92f;
+            const float torsoD = bodyWidth * 0.72f;
+
+            // Core body + chest armor.
+            drawBox(0.0f, bodyHeight*0.50f, 0.0f,
+                    torsoW, bodyHeight, torsoD, br,bg,bb);
+            drawBox(0.0f, bodyHeight*0.60f, -0.05f,
+                    torsoW*0.88f, bodyHeight*0.48f, torsoD*0.90f,
+                    br*0.72f,bg*0.72f,bb*0.72f);
+
+            // Belt and shoulder plates.
+            drawBox(0.0f, bodyHeight*0.34f, -0.02f,
+                    torsoW*1.02f, 0.16f, torsoD*1.02f,
+                    br*0.45f,bg*0.45f,bb*0.45f);
+            drawBox(-torsoW*0.62f, bodyHeight*0.79f, 0.0f,
+                    0.30f,0.22f,0.48f, br*0.85f,bg*0.85f,bb*0.85f);
+            drawBox( torsoW*0.62f, bodyHeight*0.79f, 0.0f,
+                    0.30f,0.22f,0.48f, br*0.85f,bg*0.85f,bb*0.85f);
+
+            // Helmet with face visor and side ear modules.
+            drawBox(0.0f,headY,0.0f,
+                    bodyWidth*0.68f,0.56f,bodyWidth*0.68f,
+                    br*0.82f,bg*0.82f,bb*0.82f);
+            drawBox(0.0f,headY-0.04f,-bodyWidth*0.38f,
+                    bodyWidth*0.50f,0.18f,bodyWidth*0.16f,
+                    0.08f,0.78f,0.92f);
+            drawBox(-bodyWidth*0.39f,headY,0.0f,
+                    0.12f,0.24f,0.34f,0.10f,0.10f,0.12f);
+            drawBox( bodyWidth*0.39f,headY,0.0f,
+                    0.12f,0.24f,0.34f,0.10f,0.10f,0.12f);
+
+            // Arms with forearms angled toward the weapon.
+            drawBox(-torsoW*0.66f,bodyHeight*0.58f,-0.05f,
+                    0.24f,bodyHeight*0.46f,0.28f,
+                    br*0.78f,bg*0.78f,bb*0.78f);
+            drawBox( torsoW*0.66f,bodyHeight*0.58f,-0.05f,
+                    0.24f,bodyHeight*0.46f,0.28f,
+                    br*0.78f,bg*0.78f,bb*0.78f);
+            drawBox(-torsoW*0.70f,bodyHeight*0.30f,-0.28f,
+                    0.22f,0.34f,0.22f,
+                    br*0.60f,bg*0.60f,bb*0.60f);
+            drawBox( torsoW*0.70f,bodyHeight*0.30f,-0.28f,
+                    0.22f,0.34f,0.22f,
+                    br*0.60f,bg*0.60f,bb*0.60f);
+
+            // Two separate legs and heavy boots.
+            const float legW = bodyWidth*0.34f;
+            drawBox(-legW*0.62f,0.48f,0.02f,
+                    legW,0.78f,legW*0.95f,
+                    br*0.62f,bg*0.62f,bb*0.62f);
+            drawBox( legW*0.62f,0.48f,0.02f,
+                    legW,0.78f,legW*0.95f,
+                    br*0.62f,bg*0.62f,bb*0.62f);
+            drawBox(-legW*0.62f,0.10f,-0.18f,
+                    legW*1.05f,0.22f,legW*1.35f,
+                    0.07f,0.07f,0.08f);
+            drawBox( legW*0.62f,0.10f,-0.18f,
+                    legW*1.05f,0.22f,legW*1.35f,
+                    0.07f,0.07f,0.08f);
+
+            // Backpack / reactor block.
+            drawBox(0.0f,bodyHeight*0.56f,0.42f,
+                    torsoW*0.62f,bodyHeight*0.58f,0.22f,
+                    br*0.42f,bg*0.42f,bb*0.42f);
+
+            // Distinctive rifle held in the forward (-Z) direction.
+            drawBox(0.0f,bodyHeight*0.56f,-0.58f,
+                    0.20f,0.20f,1.10f,
+                    0.08f,0.08f,0.10f);
+            drawBox(0.0f,bodyHeight*0.56f,-1.22f,
+                    0.12f,0.12f,0.50f,
+                    0.05f,0.05f,0.06f);
+            drawBox(0.0f,bodyHeight*0.69f,-0.72f,
+                    0.34f,0.12f,0.26f,
+                    0.12f,0.13f,0.15f);
+
+            // Small world-specific faction markings.
+            if (e.world == WORLD_OCEAN)
+                drawBox(0.0f,bodyHeight*0.72f,-torsoD*0.53f,
+                        0.26f,0.18f,0.05f,0.05f,0.72f,0.82f);
+            else if (e.world == WORLD_WINTER)
+                drawBox(0.0f,bodyHeight*0.72f,-torsoD*0.53f,
+                        0.30f,0.20f,0.05f,0.75f,0.90f,1.0f);
         }
 
         // Ocean enemies carry fins/floatation gear; winter enemies carry ice armor.
@@ -4530,7 +5105,7 @@ static void drawWeapon()
             0.15f
         );
     }
-    else
+    else if (w == WEAPON_SHOTGUN)
     {
         drawBox(
             0.0f,
@@ -4580,6 +5155,13 @@ static void drawWeapon()
             0.11f
         );
     }
+    else if (w == WEAPON_ROCKET)
+    {
+        drawBox(0,0,0,0.58f,0.48f,1.45f,0.10f,0.11f,0.12f);
+        drawBox(0,-0.30f,0.18f,0.32f,0.72f,0.35f,0.07f,0.07f,0.08f);
+        drawBox(0,0.03f,-1.02f,0.18f,0.18f,0.85f,0.14f,0.15f,0.16f);
+        drawBox(0,0.16f,-1.45f,0.38f,0.38f,0.28f,0.16f,0.17f,0.19f);
+    }
 
     glPopMatrix();
 
@@ -4614,9 +5196,109 @@ static void drawWeapon()
 }
 
 // ============================================================
-// HUD
+// HUD TEXT / PIXEL FONT
 // ============================================================
 
+static const uint8_t g_font5x7[36][7] = {
+    {0x0E,0x11,0x11,0x1F,0x11,0x11,0x11}, // A
+    {0x1E,0x11,0x11,0x1E,0x11,0x11,0x1E}, // B
+    {0x0F,0x10,0x10,0x10,0x10,0x10,0x0F}, // C
+    {0x1E,0x11,0x11,0x11,0x11,0x11,0x1E}, // D
+    {0x1F,0x10,0x10,0x1E,0x10,0x10,0x1F}, // E
+    {0x1F,0x10,0x10,0x1E,0x10,0x10,0x10}, // F
+    {0x0F,0x10,0x10,0x17,0x11,0x11,0x0F}, // G
+    {0x11,0x11,0x11,0x1F,0x11,0x11,0x11}, // H
+    {0x1F,0x04,0x04,0x04,0x04,0x04,0x1F}, // I
+    {0x01,0x01,0x01,0x01,0x11,0x11,0x0E}, // J
+    {0x11,0x12,0x14,0x18,0x14,0x12,0x11}, // K
+    {0x10,0x10,0x10,0x10,0x10,0x10,0x1F}, // L
+    {0x11,0x1B,0x15,0x15,0x11,0x11,0x11}, // M
+    {0x11,0x19,0x15,0x13,0x11,0x11,0x11}, // N
+    {0x0E,0x11,0x11,0x11,0x11,0x11,0x0E}, // O
+    {0x1E,0x11,0x11,0x1E,0x10,0x10,0x10}, // P
+    {0x0E,0x11,0x11,0x11,0x15,0x12,0x0D}, // Q
+    {0x1E,0x11,0x11,0x1E,0x14,0x12,0x11}, // R
+    {0x0F,0x10,0x10,0x0E,0x01,0x01,0x1E}, // S
+    {0x1F,0x04,0x04,0x04,0x04,0x04,0x04}, // T
+    {0x11,0x11,0x11,0x11,0x11,0x11,0x0E}, // U
+    {0x11,0x11,0x11,0x11,0x11,0x0A,0x04}, // V
+    {0x11,0x11,0x11,0x15,0x15,0x1B,0x11}, // W
+    {0x11,0x11,0x0A,0x04,0x0A,0x11,0x11}, // X
+    {0x11,0x11,0x0A,0x04,0x04,0x04,0x04}, // Y
+    {0x1F,0x01,0x02,0x04,0x08,0x10,0x1F}, // Z
+    {0x0E,0x11,0x13,0x15,0x19,0x11,0x0E}, // 0
+    {0x04,0x0C,0x04,0x04,0x04,0x04,0x0E}, // 1
+    {0x0E,0x11,0x01,0x02,0x04,0x08,0x1F}, // 2
+    {0x1E,0x01,0x01,0x0E,0x01,0x01,0x1E}, // 3
+    {0x02,0x06,0x0A,0x12,0x1F,0x02,0x02}, // 4
+    {0x1F,0x10,0x10,0x1E,0x01,0x01,0x1E}, // 5
+    {0x0E,0x10,0x10,0x1E,0x11,0x11,0x0E}, // 6
+    {0x1F,0x01,0x02,0x04,0x08,0x08,0x08}, // 7
+    {0x0E,0x11,0x11,0x0E,0x11,0x11,0x0E}, // 8
+    {0x0E,0x11,0x11,0x0F,0x01,0x01,0x0E}  // 9
+};
+
+static int fontIndex(char c)
+{
+    c = (char)std::toupper((unsigned char)c);
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= '0' && c <= '9') return 26 + (c - '0');
+    return -1;
+}
+
+static void drawText(const std::string& text, float x, float y, float scale, float spacing = 1.0f)
+{
+    glBegin(GL_QUADS);
+    float pen = x;
+    for (char c : text)
+    {
+        if (c == ' ') { pen += 4.0f * scale; continue; }
+        if (c == '-' ) {
+            const float w=5.0f*scale, h=1.0f*scale;
+            glVertex2f(pen,y+3.0f*scale); glVertex2f(pen+w,y+3.0f*scale);
+            glVertex2f(pen+w,y+4.0f*scale); glVertex2f(pen,y+4.0f*scale);
+            pen += 6.0f*scale; continue;
+        }
+        if (c == ':' ) {
+            const float q=scale;
+            glVertex2f(pen+2*q,y+2*q); glVertex2f(pen+3*q,y+2*q); glVertex2f(pen+3*q,y+3*q); glVertex2f(pen+2*q,y+3*q);
+            glVertex2f(pen+2*q,y+5*q); glVertex2f(pen+3*q,y+5*q); glVertex2f(pen+3*q,y+6*q); glVertex2f(pen+2*q,y+6*q);
+            pen += 5.0f*scale; continue;
+        }
+        if (c == '.' || c == '!') {
+            const float q=scale;
+            const float yy=(c=='.')?y:y+1.0f*scale;
+            glVertex2f(pen+2*q,yy); glVertex2f(pen+3*q,yy); glVertex2f(pen+3*q,yy+q); glVertex2f(pen+2*q,yy+q);
+            if (c=='!') { glVertex2f(pen+2*q,y+5*q); glVertex2f(pen+3*q,y+5*q); glVertex2f(pen+3*q,y+7*q); glVertex2f(pen+2*q,y+7*q); }
+            pen += 5.0f*scale; continue;
+        }
+        const int idx=fontIndex(c);
+        if (idx < 0) { pen += 6.0f*scale; continue; }
+        for (int row=0; row<7; ++row)
+        {
+            const uint8_t bits=g_font5x7[idx][row];
+            for (int col=0; col<5; ++col)
+            {
+                if (!(bits & (1u << (4-col)))) continue;
+                const float x0=pen+col*scale, y0=y+(6-row)*scale;
+                glVertex2f(x0,y0); glVertex2f(x0+scale,y0); glVertex2f(x0+scale,y0+scale); glVertex2f(x0,y0+scale);
+            }
+        }
+        pen += 6.0f*scale + spacing*scale;
+    }
+    glEnd();
+}
+
+static std::string hudMessageText()
+{
+    std::string s = g_message;
+    if (s.size() > 62) s.resize(62);
+    return s;
+}
+
+// ============================================================
+// HUD
+// ============================================================
 
 static void drawRadar(int W, int H)
 {
@@ -4633,6 +5315,7 @@ static void drawRadar(int W, int H)
     glPushMatrix();
     glLoadIdentity();
     glDisable(GL_DEPTH_TEST);
+    glDisable(GL_FOG);
 
     // Circular dark backing, built from horizontal quads.
     glColor3f(0.015f,0.025f,0.035f);
@@ -4739,6 +5422,21 @@ static void drawRadar(int W, int H)
     }
     glEnd();
 
+    // Rocket ammunition markers.
+    if(g_world==WORLD_OCEAN)
+    {
+        glPointSize(5.0f); glBegin(GL_POINTS);
+        for(const auto& o:g_objects)
+        {
+            if(!o.active || o.world!=WORLD_OCEAN || o.type!=OBJECT_ROCKET_AMMO) continue;
+            const float dx=o.x-g_px,dz=o.z-g_pz; if(dx*dx+dz*dz>range*range) continue;
+            const float px=cx+(dx/range)*radius,py=cy+(dz/range)*radius,qx=px-cx,qy=py-cy;
+            if(qx*qx+qy*qy>=(radius-4)*(radius-4)) continue;
+            glColor3f(1.0f,0.72f,0.08f); glVertex2f(px,py);
+        }
+        glEnd();
+    }
+
     // Giant flying submarine markers (ocean world only).
     if (g_world == WORLD_OCEAN)
     {
@@ -4812,6 +5510,7 @@ static void drawRadar(int W, int H)
     glEnd();
 
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_FOG);
     glPopMatrix();
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
@@ -4844,6 +5543,7 @@ static void drawHUD(
     glLoadIdentity();
 
     glDisable(GL_DEPTH_TEST);
+    glDisable(GL_FOG);
 
     // crosshair
     float cx =
@@ -4882,6 +5582,18 @@ static void drawHUD(
         cx + 1.5f,
         cy + 14
     );
+
+    // Story/transmission panel. The message system is now visible in-game,
+    // so the campaign is not just background state.
+    const float panelW = std::min(900.0f, (float)W - 60.0f);
+    const float panelX = W*0.5f - panelW*0.5f;
+    const float panelY = H - 78.0f;
+    glColor3f(0.02f,0.025f,0.04f);
+    rect(panelX,panelY,panelX+panelW,panelY+38.0f);
+    glColor3f(0.08f,0.42f,0.55f);
+    rect(panelX,panelY,panelX+4.0f,panelY+38.0f);
+    glColor3f(0.80f,0.92f,1.0f);
+    drawText(hudMessageText(),panelX+14.0f,panelY+12.0f,2.0f,0.35f);
 
     // health background
     glColor3f(
@@ -4988,7 +5700,7 @@ static void drawHUD(
     );
 
     // small weapon bars
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < 4; ++i)
     {
         if (i == g_currentWeapon)
         {
@@ -5008,12 +5720,28 @@ static void drawHUD(
         }
 
         rect(
-            bx + 10 + i * 70,
+            bx + 10 + i * 52,
             by + 10,
-            bx + 60 + i * 70,
+            bx + 48 + i * 52,
             by + 28
         );
     }
+
+    // Jetpack status
+    glColor3f(0.04f,0.05f,0.07f);
+    rect(30,78,330,102);
+    const float fuel = clampf(g_jetpackFuel / JETPACK_MAX_FUEL,0.0f,1.0f);
+    glColor3f(0.12f,0.72f,0.92f);
+    rect(35,83,35+290*fuel,97);
+    glColor3f(g_jetpackEnabled ? 0.95f : 0.55f,0.85f,0.95f);
+    drawNumber(345,80,22,(int)std::round(g_jetpackFuel));
+
+    // Campaign stage indicator.
+    glColor3f(0.95f,0.78f,0.22f);
+    drawNumber(W-360,H-80,28,std::min(g_storyObjective+1,STORY_BEAT_COUNT));
+
+    glColor3f(0.62f,0.70f,0.78f);
+    drawText("F JETPACK  SPACE THRUST", W*0.5f-125.0f, 8.0f, 1.5f, 0.25f);
 
     // damage overlay
     if (g_damageFlash > 0.0f)
@@ -5060,6 +5788,7 @@ static void drawHUD(
     }
 
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_FOG);
 
     glMatrixMode(GL_PROJECTION);
 
@@ -5156,6 +5885,13 @@ int main()
 
     glDepthFunc(GL_LEQUAL);
 
+    glShadeModel(GL_SMOOTH);
+    glEnable(GL_FOG);
+    glFogi(GL_FOG_MODE, GL_LINEAR);
+    glHint(GL_FOG_HINT, GL_NICEST);
+    glFogf(GL_FOG_START, 300.0f);
+    glFogf(GL_FOG_END, 640.0f);
+
     glDisable(GL_CULL_FACE);
 
     glEnable(GL_COLOR_MATERIAL);
@@ -5251,6 +5987,28 @@ int main()
             GL_DEPTH_BUFFER_BIT
         );
 
+        if (g_world == WORLD_OCEAN)
+        {
+            const GLfloat fogColor[] = {0.015f,0.12f,0.20f,1.0f};
+            glFogfv(GL_FOG_COLOR, fogColor);
+            glFogf(GL_FOG_START, 220.0f);
+            glFogf(GL_FOG_END, 610.0f);
+        }
+        else if (g_world == WORLD_WINTER)
+        {
+            const GLfloat fogColor[] = {0.72f,0.80f,0.88f,1.0f};
+            glFogfv(GL_FOG_COLOR, fogColor);
+            glFogf(GL_FOG_START, 240.0f);
+            glFogf(GL_FOG_END, 620.0f);
+        }
+        else
+        {
+            const GLfloat fogColor[] = {0.025f,0.045f,0.075f,1.0f};
+            glFogfv(GL_FOG_COLOR, fogColor);
+            glFogf(GL_FOG_START, 300.0f);
+            glFogf(GL_FOG_END, 640.0f);
+        }
+
         // ----------------------------------------------------
         // SKY
         // ----------------------------------------------------
@@ -5343,6 +6101,7 @@ int main()
         drawWorld();
 
         drawEnemyProjectiles();
+        drawExplosions();
         drawEnemies();
 
         // ----------------------------------------------------
@@ -5359,6 +6118,7 @@ int main()
         glLoadIdentity();
 
         drawWeapon();
+        drawJetpackFlames();
 
         glPopMatrix();
 

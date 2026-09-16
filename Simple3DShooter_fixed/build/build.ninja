@@ -61,18 +61,6 @@ build CMakeFiles/Simple3DShooter.dir/src/main.cpp.obj: CXX_COMPILER__Simple3DSho
   TARGET_PDB = Simple3DShooter.pdb
   TARGET_SUPPORT_DIR = CMakeFiles\Simple3DShooter.dir
 
-build CMakeFiles/Simple3DShooter.dir/src/Enemy.cpp.obj: CXX_COMPILER__Simple3DShooter_unscanned_Release C$:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src/Enemy.cpp || cmake_object_order_depends_target_Simple3DShooter
-  CONFIG = Release
-  DEFINES = -DGLFW_DLL
-  DEP_FILE = CMakeFiles\Simple3DShooter.dir\src\Enemy.cpp.obj.d
-  FLAGS = -O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic
-  INCLUDES = -IC:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src
-  OBJECT_DIR = CMakeFiles\Simple3DShooter.dir
-  OBJECT_FILE_DIR = CMakeFiles\Simple3DShooter.dir\src
-  TARGET_COMPILE_PDB = CMakeFiles\Simple3DShooter.dir\
-  TARGET_PDB = Simple3DShooter.pdb
-  TARGET_SUPPORT_DIR = CMakeFiles\Simple3DShooter.dir
-
 build CMakeFiles/Simple3DShooter.dir/src/Item.cpp.obj: CXX_COMPILER__Simple3DShooter_unscanned_Release C$:/Users/Михаил/OneDrive/Документы/c++/Simple3DShooter/Simple3DShooter_fixed/src/Item.cpp || cmake_object_order_depends_target_Simple3DShooter
   CONFIG = Release
   DEFINES = -DGLFW_DLL
@@ -165,7 +153,7 @@ build CMakeFiles/Simple3DShooter.dir/src/World.cpp.obj: CXX_COMPILER__Simple3DSh
 #############################################
 # Link the executable Simple3DShooter.exe
 
-build Simple3DShooter.exe: CXX_EXECUTABLE_LINKER__Simple3DShooter_Release CMakeFiles/Simple3DShooter.dir/src/main.cpp.obj CMakeFiles/Simple3DShooter.dir/src/Enemy.cpp.obj CMakeFiles/Simple3DShooter.dir/src/Item.cpp.obj CMakeFiles/Simple3DShooter.dir/src/ItemManager.cpp.obj CMakeFiles/Simple3DShooter.dir/src/Object.cpp.obj CMakeFiles/Simple3DShooter.dir/src/Player.cpp.obj CMakeFiles/Simple3DShooter.dir/src/Story.cpp.obj CMakeFiles/Simple3DShooter.dir/src/Weapon.cpp.obj CMakeFiles/Simple3DShooter.dir/src/World.cpp.obj | C$:/msys64/ucrt64/lib/libglfw3.dll.a
+build Simple3DShooter.exe: CXX_EXECUTABLE_LINKER__Simple3DShooter_Release CMakeFiles/Simple3DShooter.dir/src/main.cpp.obj CMakeFiles/Simple3DShooter.dir/src/Item.cpp.obj CMakeFiles/Simple3DShooter.dir/src/ItemManager.cpp.obj CMakeFiles/Simple3DShooter.dir/src/Object.cpp.obj CMakeFiles/Simple3DShooter.dir/src/Player.cpp.obj CMakeFiles/Simple3DShooter.dir/src/Story.cpp.obj CMakeFiles/Simple3DShooter.dir/src/Weapon.cpp.obj CMakeFiles/Simple3DShooter.dir/src/World.cpp.obj | C$:/msys64/ucrt64/lib/libglfw3.dll.a
   CONFIG = Release
   FLAGS = -O3 -DNDEBUG
   LINK_LIBRARIES = C:/msys64/ucrt64/lib/libglfw3.dll.a  -lopengl32  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
