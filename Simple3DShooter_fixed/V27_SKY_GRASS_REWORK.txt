@@ -1,0 +1,9 @@
+V27 rework
+
+- Removed the previous Earth sky textures and old reference image.
+- Added the new user-provided sky reference as a processed seamless equirectangular texture.
+- Sky is rendered after the camera matrix is established, eliminating the old dark patch and edge artifacts.
+- Sun is positioned in fixed world space and follows the day/night orbit instead of the player.
+- Stars are generated from fixed world-space coordinates and slowly rotate as a celestial sphere.
+- Replaced the low-resolution grass texture with a 512x512 RGBA atlas of fine blades.
+- Grass cards are narrower, more numerous, alpha blended and varied in height/lean.

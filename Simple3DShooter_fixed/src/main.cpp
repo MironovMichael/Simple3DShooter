@@ -35,6 +35,8 @@
 //    - HUD
 // ============================================================
 
+#define NOMINMAX
+#include <windows.h>
 #include <GLFW/glfw3.h>
 
 #include <cmath>
@@ -47,6 +49,8 @@
 #include <array>
 #include <cstdint>
 #include <cctype>
+#include <fstream>
+#include <cstring>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -60,6 +64,51 @@ static constexpr float WORLD_SCALE = 3.0f;
 static const float ARENA = 630.0f;
 
 static void createCityBiome();
+
+static GLuint g_earthSkyTexture = 0;
+static GLuint g_grassTexture = 0;
+
+static GLuint loadBMPTexture(const char* path)
+{
+    FILE* f = std::fopen(path, "rb");
+    if (!f) return 0;
+    unsigned char fh[14]{}, ih[40]{};
+    if (std::fread(fh,1,14,f)!=14 || std::fread(ih,1,40,f)!=40) { std::fclose(f); return 0; }
+    if (fh[0]!='B' || fh[1]!='M') { std::fclose(f); return 0; }
+    const int off=fh[10]|(fh[11]<<8)|(fh[12]<<16)|(fh[13]<<24);
+    const int w=ih[4]|(ih[5]<<8)|(ih[6]<<16)|(ih[7]<<24);
+    const int rh=ih[8]|(ih[9]<<8)|(ih[10]<<16)|(ih[11]<<24);
+    const int bpp=ih[14]|(ih[15]<<8);
+    if(w<=0 || rh==0 || (bpp!=24 && bpp!=32)){std::fclose(f);return 0;}
+    const bool bottomUp=rh>0; const int h=std::abs(rh), bytes=bpp/8;
+    const int stride=((w*bytes+3)/4)*4;
+    std::vector<unsigned char> row((size_t)stride), rgba((size_t)w*h*4);
+    std::fseek(f,off,SEEK_SET);
+    for(int y=0;y<h;++y){
+        if(std::fread(row.data(),1,stride,f)!=(size_t)stride){std::fclose(f);return 0;}
+        const int dy=bottomUp?h-1-y:y;
+        for(int x=0;x<w;++x){const unsigned char* q=row.data()+x*bytes; unsigned char* d=rgba.data()+((size_t)dy*w+x)*4; d[0]=q[2];d[1]=q[1];d[2]=q[0];d[3]=(bytes==4?q[3]:255);}
+    }
+    std::fclose(f); GLuint tex=0; glGenTextures(1,&tex); glBindTexture(GL_TEXTURE_2D,tex);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_REPEAT); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP);
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,rgba.data()); glBindTexture(GL_TEXTURE_2D,0); return tex;
+}
+
+static void initEnvironmentTextures()
+{
+    g_earthSkyTexture=loadBMPTexture("assets/earth_sky_new.bmp");
+    if(!g_earthSkyTexture) g_earthSkyTexture=loadBMPTexture("../assets/earth_sky_new.bmp");
+    g_grassTexture=loadBMPTexture("assets/grass_realistic_v2.bmp");
+    if(!g_grassTexture) g_grassTexture=loadBMPTexture("../assets/grass_realistic_v2.bmp");
+}
+
+static void destroyEnvironmentTextures()
+{
+    if(g_earthSkyTexture) glDeleteTextures(1,&g_earthSkyTexture);
+    if(g_grassTexture) glDeleteTextures(1,&g_grassTexture);
+    g_earthSkyTexture=g_grassTexture=0;
+}
 
 // ============================================================
 // MULTIVERSE TYPES / STATE
@@ -336,9 +385,10 @@ static int g_kills = 0;
 
 static float g_gameTime = 0.0f;
 static const float DAY_NIGHT_CYCLE = 48.0f;
-static constexpr float TERRAIN_RENDER_DISTANCE = 520.0f;
-static constexpr float OBJECT_RENDER_DISTANCE = 620.0f;
-static constexpr float ENEMY_RENDER_DISTANCE = 820.0f;
+static constexpr float TERRAIN_RENDER_DISTANCE = 260.0f;
+static constexpr float OBJECT_RENDER_DISTANCE = 210.0f;
+static constexpr float ENEMY_RENDER_DISTANCE = 200.0f;
+// PERFORMANCE PROFILE: bounded view distances, batched terrain, low-detail distant enemies.
 
 static int g_storyStage = 0;
 static float g_storyTimer = 7.0f;
@@ -414,7 +464,7 @@ struct Weapon
 static Weapon g_weapons[4] =
 {
     {
-        "PISTOL",
+        "ПИСТОЛЕТ",
         12,
         12,
         72,
@@ -430,7 +480,7 @@ static Weapon g_weapons[4] =
     },
 
     {
-        "RIFLE",
+        "ВИНТОВКА",
         30,
         30,
         150,
@@ -446,7 +496,7 @@ static Weapon g_weapons[4] =
     },
 
     {
-        "SHOTGUN",
+        "ДРОБОВИК",
         8,
         8,
         48,
@@ -462,7 +512,7 @@ static Weapon g_weapons[4] =
     },
 
     {
-        "ROCKET LAUNCHER",
+        "РАКЕТНИЦА",
         1,
         2,
         6,
@@ -959,7 +1009,7 @@ static bool tunnelTransitionAllowed(
     return true;
 }
 
-static bool isTunnelEntranceCarvedZone(float x, float z)
+[[maybe_unused]] static bool isTunnelEntranceCarvedZone(float x, float z)
 {
     // The surface mesh is never deleted over buried tunnels. This function is
     // used only for portal-clearance checks around the visible entrance.
@@ -1101,8 +1151,10 @@ static void terrainBaseColor(float x, float z, float avgHeight, float& r, float&
         case 9: // winter
             r=0.78f; g=0.84f; b=0.90f;
             break;
-        case 1: // meadow
-            r=0.15f + moisture*0.045f; g=0.30f + moisture*0.11f; b=0.075f + p*0.035f;
+        case 1: // meadow — lush, sunlit grassland
+            r=0.075f + moisture*0.055f + p*0.025f;
+            g=0.34f + moisture*0.15f + p*0.045f;
+            b=0.035f + p*0.045f;
             break;
         case 2: // jungle
             r=0.08f; g=0.34f; b=0.10f;
@@ -1122,8 +1174,10 @@ static void terrainBaseColor(float x, float z, float avgHeight, float& r, float&
         case 7: // city
             r=0.17f; g=0.19f; b=0.21f;
             break;
-        default: // mixed grassland / soil
-            r=0.17f + p*0.045f; g=0.33f + moisture*0.10f; b=0.095f + p*0.025f;
+        default: // mixed grassland / natural soil
+            r=0.10f + p*0.075f + (1.0f-moisture)*0.035f;
+            g=0.35f + moisture*0.13f + p*0.055f;
+            b=0.045f + p*0.035f;
             break;
     }
 
@@ -1177,10 +1231,10 @@ static void generateDecor()
     if (g_world != WORLD_MAIN)
         return;
     // 10-unit cells: dense enough to look populated, sparse enough to render fast.
-    const float cell = 8.0f;
+    const float cell = 14.0f;
     const int minC = static_cast<int>(floorf((-ARENA+cell)*0.5f/cell));
     const int maxC = static_cast<int>(ceilf((ARENA-cell)*0.5f/cell));
-    g_decor.reserve(32000);
+    g_decor.reserve(7000);
 
     for (int iz=minC; iz<=maxC; ++iz)
     {
@@ -1215,7 +1269,7 @@ static void generateDecor()
             // Extra small blades/clumps around the primary decor in fertile biomes.
             if (type==DECOR_GRASS || type==DECOR_FLOWER)
             {
-                for (int k=0;k<5;++k)
+                for (int k=0;k<2;++k)
                 {
                     const float ox=(hash01(ix*3+k,iz,81u)-0.5f)*cell*0.9f;
                     const float oz=(hash01(ix,iz*3+k,87u)-0.5f)*cell*0.9f;
@@ -1804,7 +1858,7 @@ static void rect(
     glEnd();
 }
 
-static void drawDigit(
+[[maybe_unused]] static void drawDigit(
     float x,
     float y,
     float s,
@@ -1887,37 +1941,15 @@ static void drawDigit(
         );
 }
 
+static void drawText(const std::string& text, float x, float y, float scale, float spacing = 1.0f);
+
 static void drawNumber(
     float x,
     float y,
     float s,
     int value)
 {
-    char buffer[32];
-
-    snprintf(
-        buffer,
-        sizeof(buffer),
-        "%d",
-        value
-    );
-
-    float px = x;
-
-    for (char* p = buffer; *p; ++p)
-    {
-        if (*p >= '0' && *p <= '9')
-        {
-            drawDigit(
-                px,
-                y,
-                s,
-                *p - '0'
-            );
-
-            px += s * 1.3f;
-        }
-    }
+    drawText(std::to_string(value), x, y, s * 0.16f, 0.15f);
 }
 
 // ============================================================
@@ -2062,7 +2094,7 @@ static void switchWeapon(int index)
     g_weaponRecoil = 0.0f;
 
     g_message =
-        std::string("WEAPON: ") +
+        std::string("ОРУЖИЕ: ") +
         g_weapons[index].name;
 }
 
@@ -2377,19 +2409,19 @@ static void shoot()
                 if (g_kills == 1)
                 {
                     g_message =
-                        "GOOD SHOT. MORE HOSTILES INCOMING.";
+                        "ХОРОШЕЕ ПОПАДАНИЕ. ПРИБЛИЖАЮТСЯ НОВЫЕ ПРОТИВНИКИ.";
                 }
 
                 if (g_kills == 5)
                 {
                     g_message =
-                        "COMMAND: HEAVY UNIT DETECTED.";
+                        "КОМАНДОВАНИЕ: ОБНАРУЖЕНА ТЯЖЁЛАЯ БОЕВАЯ ЕДИНИЦА.";
                 }
 
                 if (g_kills == 10)
                 {
                     g_message =
-                        "MISSION OBJECTIVE: HOLD THE AREA.";
+                        "ЦЕЛЬ МИССИИ: УДЕРЖИВАЙТЕ ПОЗИЦИЮ.";
                 }
             }
         }
@@ -2809,7 +2841,7 @@ static void resetGame()
     g_storyTimer = 2.5f;
 
     g_message =
-        "MISSION: SURVIVE AND ELIMINATE THE HOSTILES";
+        "МИССИЯ: ВЫЖИВИТЕ И УНИЧТОЖЬТЕ ПРОТИВНИКА";
 
     g_currentWeapon =
         WEAPON_PISTOL;
@@ -3630,7 +3662,7 @@ static void updatePickups()
             }
 
             g_message =
-                "AMMO PICKED UP";
+                "БОЕПРИПАСЫ ПОДОБРАНЫ";
 
             o.active = false;
         }
@@ -3646,7 +3678,7 @@ static void updatePickups()
                     );
 
                 g_message =
-                    "MEDKIT +35 HP";
+                    "АПТЕЧКА: +35 ЗДОРОВЬЯ";
 
                 o.active = false;
             }
@@ -3832,20 +3864,119 @@ static void updateGame(float dt)
 // SKY
 // ============================================================
 
+
 static void drawSky()
 {
+    // World-oriented skydome.  The dome follows only the camera position,
+    // never the camera rotation or player translation in texture space.
+    // The panorama is the new user-provided sky reference, converted to a
+    // seamless equirectangular texture.  No old sky assets are used.
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_FOG);
-    const float day=terrainDayFactor();
-    glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity();
-    glMatrixMode(GL_MODELVIEW); glPushMatrix(); glLoadIdentity();
-    const float hR=0.012f+0.30f*day, hG=0.020f+0.50f*day, hB=0.060f+0.86f*day;
-    const float tR=0.002f+0.04f*day, tG=0.004f+0.16f*day, tB=0.018f+0.60f*day;
-    glBegin(GL_QUADS);
-    glColor3f(hR,hG,hB); glVertex2f(-1,-1); glVertex2f(1,-1);
-    glColor3f(tR,tG,tB); glVertex2f(1,1); glVertex2f(-1,1);
-    glEnd();
-    glPopMatrix(); glMatrixMode(GL_PROJECTION); glPopMatrix(); glMatrixMode(GL_MODELVIEW);
+    glDisable(GL_LIGHTING);
+    glDisable(GL_CULL_FACE);
+    glDepthMask(GL_FALSE);
+
+    if (g_earthSkyTexture)
+    {
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, g_earthSkyTexture);
+        glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+
+        const float day = terrainDayFactor();
+        const float exposure = 0.24f + 0.76f * day;
+        glColor4f(exposure, exposure, exposure, 1.0f);
+
+        // Cancel camera translation, retain camera orientation.  This makes
+        // the sky behave as an infinitely distant world environment.
+        glMatrixMode(GL_MODELVIEW);
+        glPushMatrix();
+        glTranslatef(g_px, g_py + EYE_HEIGHT, g_pz);
+
+        const float radius = 2200.0f;
+        const int lon = 64;
+        const int lat = 20;
+
+        for (int j = 0; j < lat; ++j)
+        {
+            const float p0 = -0.5f * (float)M_PI + (float)j / lat * (float)M_PI;
+            const float p1 = -0.5f * (float)M_PI + (float)(j + 1) / lat * (float)M_PI;
+            const float y0 = sinf(p0), y1 = sinf(p1);
+            const float r0 = cosf(p0), r1 = cosf(p1);
+            const float v0 = 0.5f - asinf(y0) / (float)M_PI;
+            const float v1 = 0.5f - asinf(y1) / (float)M_PI;
+
+            glBegin(GL_QUADS);
+            for (int i = 0; i < lon; ++i)
+            {
+                const float a0 = 2.0f * (float)M_PI * i / lon;
+                const float a1 = 2.0f * (float)M_PI * (i + 1) / lon;
+                const float u0 = (float)i / lon;
+                const float u1 = (float)(i + 1) / lon;
+
+                glTexCoord2f(u0, v0);
+                glVertex3f(cosf(a0) * r0 * radius, y0 * radius, sinf(a0) * r0 * radius);
+                glTexCoord2f(u1, v0);
+                glVertex3f(cosf(a1) * r0 * radius, y0 * radius, sinf(a1) * r0 * radius);
+                glTexCoord2f(u1, v1);
+                glVertex3f(cosf(a1) * r1 * radius, y1 * radius, sinf(a1) * r1 * radius);
+                glTexCoord2f(u0, v1);
+                glVertex3f(cosf(a0) * r1 * radius, y1 * radius, sinf(a0) * r1 * radius);
+            }
+            glEnd();
+        }
+
+        glPopMatrix();
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glDisable(GL_TEXTURE_2D);
+    }
+
+    // A distant, world-fixed sun.  Its position is not derived from g_px/g_pz,
+    // so walking does not make the sun follow the player.
+    const float phase = fmodf(g_gameTime, DAY_NIGHT_CYCLE) / DAY_NIGHT_CYCLE;
+    const float az = phase * 2.0f * (float)M_PI - 0.65f * (float)M_PI;
+    const float elevation = 0.12f + 0.78f * sinf(az);
+    if (elevation > 0.025f)
+    {
+        const float ce = cosf(0.82f * az);
+        const float se = sinf(0.82f * az);
+        const float sy = clampf(elevation, 0.04f, 0.90f);
+        const float horiz = sqrtf(std::max(0.001f, 1.0f - sy * sy));
+        const float sx = cosf(az) * horiz;
+        const float sz = sinf(az) * horiz;
+
+        const float dist = 5000.0f;
+        const float cx = sx * dist;
+        const float cy = sy * dist;
+        const float cz = sz * dist;
+        const float sr = 38.0f + 8.0f * sinf(phase * 2.0f * (float)M_PI);
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        for (int ring = 2; ring >= 1; --ring)
+        {
+            const float rr = sr * (1.0f + ring * 0.75f);
+            glColor4f(1.0f, 0.86f, 0.42f, 0.018f + 0.008f * terrainDayFactor());
+            glBegin(GL_QUADS);
+            glVertex3f(cx - rr, cy - rr, cz);
+            glVertex3f(cx + rr, cy - rr, cz);
+            glVertex3f(cx + rr, cy + rr, cz);
+            glVertex3f(cx - rr, cy + rr, cz);
+            glEnd();
+        }
+        glColor4f(1.0f, 0.95f, 0.72f, 0.96f);
+        glBegin(GL_QUADS);
+        glVertex3f(cx - sr, cy - sr, cz);
+        glVertex3f(cx + sr, cy - sr, cz);
+        glVertex3f(cx + sr, cy + sr, cz);
+        glVertex3f(cx - sr, cy + sr, cz);
+        glEnd();
+        glDisable(GL_BLEND);
+        (void)ce;
+        (void)se;
+    }
+
+    glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_FOG);
 }
@@ -3853,44 +3984,48 @@ static void drawSky()
 static void drawWorldStarField()
 {
     const float day = terrainDayFactor();
-    if (day > 0.5f)
-        return;
+    if (day > 0.30f) return;
 
-    // World-space stars: their positions are fixed in the world, not in
-    // screen space, so turning or moving the player does not drag the stars.
-    const float radius = 900.0f;
-    unsigned int seed = 0x7A1F39D1u;
+    // Fixed celestial sphere: positions are generated from a constant seed
+    // around world origin, never from the player's coordinates.
     glDisable(GL_DEPTH_TEST);
-    glPointSize(1.5f);
+    glDisable(GL_FOG);
+    glDisable(GL_TEXTURE_2D);
+    glPointSize(1.6f);
+
+    uint32_t seed = 0xA17C9E31u;
+    const float radius = 5000.0f;
+    const float night = clampf((0.30f - day) / 0.30f, 0.0f, 1.0f);
+
     glBegin(GL_POINTS);
-    for (int i = 0; i < 420; ++i)
+    for (int i = 0; i < 350; ++i)
     {
         seed = 1664525u * seed + 1013904223u;
         const float u = (seed & 0xFFFFu) / 65535.0f;
         seed = 1664525u * seed + 1013904223u;
         const float v = (seed & 0xFFFFu) / 65535.0f;
         seed = 1664525u * seed + 1013904223u;
-        const float brightness = 0.45f + 0.55f * ((seed & 0xFFFFu) / 65535.0f);
+        const float brightness = 0.35f + 0.65f * ((seed & 0xFFFFu) / 65535.0f);
 
-        // Restrict stars to the upper hemisphere with a small band around
-        // the horizon so mountains can still silhouette against them.
         const float theta = 2.0f * (float)M_PI * u;
-        const float y = 0.08f + 0.92f * v;
-        const float r = sqrtf(std::max(0.0f, 1.0f - y*y));
-        const float sx = cosf(theta) * r * radius;
-        const float sy = y * radius;
-        const float sz = sinf(theta) * r * radius;
+        const float y = 0.10f + 0.88f * v;
+        const float r = sqrtf(std::max(0.0f, 1.0f - y * y));
 
-        const float c = brightness * (0.70f + 0.30f * (1.0f - day));
-        glColor3f(0.70f*c, 0.78f*c, 1.00f*c);
-        glVertex3f(sx, sy, sz);
+        // Slowly rotate the celestial sphere around the fixed world origin.
+        const float spin = 0.0045f * g_gameTime;
+        const float ca = cosf(theta + spin), sa = sinf(theta + spin);
+        glColor3f(0.58f * brightness * night,
+                  0.70f * brightness * night,
+                  0.92f * brightness * night);
+        glVertex3f(ca * r * radius, y * radius, sa * r * radius);
     }
     glEnd();
+
+    glPointSize(1.0f);
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_FOG);
 }
 
-
-// ============================================================
 // DRAW WORLD
 // ============================================================
 
@@ -4139,7 +4274,7 @@ static void enterWorldPortal(const WorldPortal& p)
     g_onGround = true;
     seedWorldEnemies(g_world);
 
-    g_message = std::string("PORTAL: ENTERED ") + worldName(g_world);
+    g_message = std::string("ПОРТАЛ: ПЕРЕХОД В ") + worldName(g_world);
 }
 
 static void updateWorldPortals()
@@ -4352,11 +4487,47 @@ static void createCityBiome()
     for(const auto& p:P) addSkyscraper(CITY_CENTER_X+p[0],CITY_CENTER_Z+p[1],p[2],p[3],p[4]);
 }
 
+
+static void drawGrassCluster(float s, float rotation)
+{
+    if (!g_grassTexture) return;
+
+    // High-resolution alpha grass atlas: narrow crossed blades instead of
+    // the old four broad "cards".  Mipmapping keeps distant grass smooth.
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, g_grassTexture);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_ALPHA_TEST);
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+    glColor4f(0.78f, 0.94f, 0.62f, 0.96f);
+
+    glBegin(GL_QUADS);
+    for (int blade = 0; blade < 4; ++blade)
+    {
+        const float a = rotation + blade * 0.785398163f;
+        const float ca = cosf(a), sa = sinf(a);
+        const float spread = s * (0.025f + 0.012f * (blade & 1));
+        const float lean = s * (0.18f + 0.025f * (blade % 3));
+        const float h = s * (0.85f + 0.12f * ((blade * 7) % 5));
+        const float x = ca * spread;
+        const float z = sa * spread;
+
+        glTexCoord2f(0.18f, 1.0f); glVertex3f(x - sa * 0.035f * s, 0.0f, z + ca * 0.035f * s);
+        glTexCoord2f(0.82f, 1.0f); glVertex3f(x + sa * 0.035f * s, 0.0f, z - ca * 0.035f * s);
+        glTexCoord2f(0.82f, 0.0f); glVertex3f(x + ca * lean + sa * 0.018f * s, h, z + sa * lean - ca * 0.018f * s);
+        glTexCoord2f(0.18f, 0.0f); glVertex3f(x + ca * lean - sa * 0.018f * s, h, z + sa * lean + ca * 0.018f * s);
+    }
+    glEnd();
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glDisable(GL_BLEND);
+    glDisable(GL_TEXTURE_2D);
+}
+
 static void drawDecor()
 {
-    // Vegetation/decor is exclusive to the main world.  The decor list is
-    // generated once, so without this guard it would visually follow the
-    // player into the ocean/winter worlds after a portal transition.
+    // Vegetation/decor is exclusive to the main world.
     if (g_world != WORLD_MAIN) return;
     for (const auto& d : g_decor)
     {
@@ -4369,37 +4540,40 @@ static void drawDecor()
         switch(d.type)
         {
             case DECOR_GRASS:
-                glBegin(GL_TRIANGLES);
-                for(int k=0;k<9;++k){
-                    const float baseX=(k-4)*0.055f*s;
-                    const float lean=sinf(d.rotation*3.0f+k*0.71f)*0.20f*s;
-                    const float h=s*(0.72f+0.12f*((k*17)%5)/4.0f);
-                    glColor3f(0.055f+0.018f*(k%4),0.28f+0.045f*(k%5),0.035f+0.014f*(k%3));
-                    glVertex3f(baseX,0,0); glVertex3f(baseX+lean,h,0.035f*s); glVertex3f(baseX+0.06f*s,0,0.02f*s);
-                }
-                glEnd();
-                for(int k=0;k<3;++k){
-                    const float lx=(k-1)*0.13f*s;
-                    drawBox(lx,s*(0.22f+0.08f*k),0.06f*s,0.035f*s,s*(0.34f+0.06f*k),0.035f*s,0.08f,0.38f,0.07f);
-                }
+                drawGrassCluster(s,d.rotation);
                 break;
             case DECOR_BUSH:
                 drawBox(0,s*0.35f,0,s*0.9f,s*0.7f,s*0.9f,0.08f,0.34f,0.10f);
+                drawBox(-s*0.28f,s*0.43f,s*0.05f,s*0.52f,s*0.55f,s*0.55f,0.05f,0.28f,0.07f);
+                drawBox(s*0.25f,s*0.46f,-s*0.08f,s*0.48f,s*0.58f,s*0.50f,0.07f,0.39f,0.09f);
                 break;
             case DECOR_REED:
-                for(int k=-1;k<=1;++k) drawBox(k*0.10f,s*0.55f,0.0f,0.07f,s*1.1f,0.07f,0.12f,0.48f,0.18f);
+                for(int k=-2;k<=2;++k)
+                {
+                    const float lean=0.10f*k*s;
+                    drawBox(k*0.10f*s,s*0.55f,lean,0.055f*s,s*1.1f,0.055f*s,
+                            0.07f+0.015f*(k&1),0.40f+0.035f*(k&2),0.06f);
+                }
                 break;
             case DECOR_FLOWER:
-                drawBox(0,s*0.42f,0,0.045f,s*0.84f,0.045f,0.08f,0.42f,0.05f);
-                for(int k=0;k<6;++k){ const float a=k*(float)M_PI/3.0f; drawBox(cosf(a)*s*0.16f,s*0.92f,sinf(a)*s*0.16f,0.13f,0.08f,0.13f,0.82f,0.16f+0.06f*(k%2),0.70f); }
-                drawBox(0,s*0.92f,0,0.10f,0.10f,0.10f,0.98f,0.74f,0.12f);
+                drawBox(0,s*0.42f,0,0.035f,s*0.84f,0.035f,0.06f,0.36f,0.035f);
+                for(int k=0;k<7;++k)
+                {
+                    const float a=k*(float)M_PI*2.0f/7.0f;
+                    const float rr=s*(0.13f+0.015f*(k%2));
+                    drawBox(cosf(a)*rr,s*0.90f,sinf(a)*rr,0.12f*s,0.075f*s,0.12f*s,
+                            0.78f+0.08f*(k%2),0.10f+0.04f*(k%3),0.48f+0.12f*(k%2));
+                }
+                drawBox(0,s*0.91f,0,0.10f*s,0.10f*s,0.10f*s,0.98f,0.70f,0.10f);
                 break;
             case DECOR_ROCK:
                 drawBox(0,s*0.28f,0,s*0.8f,s*0.55f,s*0.7f,0.30f,0.32f,0.34f);
+                drawBox(s*0.16f,s*0.43f,-s*0.08f,s*0.40f,s*0.28f,s*0.34f,0.38f,0.39f,0.40f);
                 break;
             case DECOR_CACTUS:
-                drawBox(0,s*0.75f,0,0.28f,s*1.5f,0.28f,0.18f,0.42f,0.12f);
-                drawBox(-s*0.22f,s*0.82f,0,0.18f,s*0.55f,0.18f,0.18f,0.42f,0.12f);
+                drawBox(0,s*0.75f,0,0.28f*s,s*1.5f,0.28f*s,0.18f,0.42f,0.12f);
+                drawBox(-s*0.22f,s*0.82f,0,0.18f*s,s*0.55f,0.18f*s,0.18f,0.42f,0.12f);
+                drawBox(s*0.20f,s*0.62f,0,0.17f*s,s*0.40f,0.17f*s,0.16f,0.38f,0.10f);
                 break;
             case DECOR_CRYSTAL:
                 drawBox(0,s*0.55f,0,0.30f,s*1.1f,0.30f,0.18f,0.82f,0.94f);
@@ -4455,7 +4629,7 @@ static void drawWinterSnowAndAtmosphere()
     glPointSize(2.2f);
     glBegin(GL_POINTS);
     // Deterministic drifting snow field; animated from game time, no RNG per frame.
-    for (int i=0;i<850;++i)
+    for (int i=0;i<220;++i)
     {
         const float fx=fmodf(i*37.13f + 11.0f, 520.0f)-260.0f;
         const float fz=fmodf(i*71.77f + 23.0f, 520.0f)-260.0f;
@@ -4471,10 +4645,11 @@ static void drawWinterSnowAndAtmosphere()
 
 static void drawWorld()
 {
-    const int GRID = 176;
+    const int GRID = 64;
     const float step = (ARENA * 2.0f) / GRID;
     const float day = terrainDayFactor();
 
+    glBegin(GL_QUADS);
     for (int ix = 0; ix < GRID; ++ix)
     {
         for (int iz = 0; iz < GRID; ++iz)
@@ -4513,14 +4688,13 @@ static void drawWorld()
             terrainBaseColor(x1,z1,y11,r11,g11,b11);
             terrainBaseColor(x0,z1,y01,r01,g01,b01);
 
-            glBegin(GL_QUADS);
             glColor3f(r00*light00,g00*light00,b00*light00); glVertex3f(x0,y00,z0);
             glColor3f(r10*light10,g10*light10,b10*light10); glVertex3f(x1,y10,z0);
             glColor3f(r11*light11,g11*light11,b11*light11); glVertex3f(x1,y11,z1);
             glColor3f(r01*light01,g01*light01,b01*light01); glVertex3f(x0,y01,z1);
-            glEnd();
         }
     }
+    glEnd();
 
     drawWinterSnowAndAtmosphere();
 
@@ -4956,7 +5130,9 @@ static void drawEnemies()
     {
         if (e.world != g_world || !e.alive) continue;
         const float edx=e.x-g_px, edz=e.z-g_pz;
-        if(edx*edx+edz*edz > ENEMY_RENDER_DISTANCE*ENEMY_RENDER_DISTANCE) continue;
+        const float enemyDist2 = edx*edx+edz*edz;
+        if(enemyDist2 > ENEMY_RENDER_DISTANCE*ENEMY_RENDER_DISTANCE) continue;
+        const bool lowDetail = enemyDist2 > 90.0f*90.0f;
         const bool drone = e.type == ENEMY_DRONE;
         const float baseY = drone ? e.y - 0.65f : terrainSupportHeight(e.x, e.z, e.radius);
         const float bodyHeight = (e.type == ENEMY_TANK) ? 3.40f : (drone ? 1.3f : 1.75f);
@@ -4980,6 +5156,21 @@ static void drawEnemies()
             bb = (e.type==ENEMY_TANK) ? 0.52f : 0.92f;
         }
         if (e.hitFlash > 0.0f){br=1.0f;bg=0.90f;bb=0.70f;}
+
+        if (lowDetail)
+        {
+            glPushMatrix();
+            glTranslatef(e.x, baseY + bodyHeight*0.45f, e.z);
+            glRotatef(-e.yaw * 180.0f / (float)M_PI, 0.0f, 1.0f, 0.0f);
+            if (e.type == ENEMY_TANK)
+                drawBox(0.0f,0.0f,0.0f,3.6f,1.4f,4.8f,br,bg,bb);
+            else if (drone)
+                drawBox(0.0f,0.0f,0.0f,1.8f,0.7f,1.5f,br,bg,bb);
+            else
+                drawBox(0.0f,0.0f,0.0f,1.0f,1.8f,0.7f,br,bg,bb);
+            glPopMatrix();
+            continue;
+        }
 
         glPushMatrix();
         glTranslatef(e.x, baseY, e.z);
@@ -5415,6 +5606,121 @@ static int cyrillicIndex(uint32_t cp)
     return -1;
 }
 
+// Windows Impact font support. The game uses the Impact font installed in Windows
+// for every HUD/menu text element. A small fallback remains below for non-Windows builds.
+#ifdef _WIN32
+static GLuint g_impactAsciiBase = 0;
+static GLuint g_impactCyrBase = 0;
+static HFONT g_impactFont = nullptr;
+static bool g_impactFontReady = false;
+
+static void initImpactFont()
+{
+    HDC dc = wglGetCurrentDC();
+    if (!dc) return;
+
+    g_impactFont = CreateFontW(
+        -96, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+        ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+        L"Impact");
+    if (!g_impactFont) return;
+
+    HFONT oldFont = (HFONT)SelectObject(dc, g_impactFont);
+    g_impactAsciiBase = glGenLists(256);
+    g_impactCyrBase = glGenLists(256);
+    const BOOL asciiOk = wglUseFontBitmapsW(dc, 0, 256, g_impactAsciiBase);
+    const BOOL cyrOk = wglUseFontBitmapsW(dc, 0x0400, 256, g_impactCyrBase);
+    SelectObject(dc, oldFont);
+
+    if (!asciiOk || !cyrOk)
+    {
+        if (g_impactAsciiBase) glDeleteLists(g_impactAsciiBase, 256);
+        if (g_impactCyrBase) glDeleteLists(g_impactCyrBase, 256);
+        g_impactAsciiBase = g_impactCyrBase = 0;
+        DeleteObject(g_impactFont);
+        g_impactFont = nullptr;
+        return;
+    }
+    g_impactFontReady = true;
+}
+
+static void destroyImpactFont()
+{
+    if (g_impactAsciiBase) glDeleteLists(g_impactAsciiBase, 256);
+    if (g_impactCyrBase) glDeleteLists(g_impactCyrBase, 256);
+    g_impactAsciiBase = g_impactCyrBase = 0;
+    if (g_impactFont) DeleteObject(g_impactFont);
+    g_impactFont = nullptr;
+    g_impactFontReady = false;
+}
+
+static std::wstring utf8ToWide(const std::string& text)
+{
+    std::wstring out;
+    for (size_t i = 0; i < text.size();)
+    {
+        const unsigned char c = (unsigned char)text[i];
+        uint32_t cp = 0;
+        size_t n = 1;
+        if (c < 0x80) cp = c;
+        else if ((c & 0xE0) == 0xC0 && i + 1 < text.size())
+        { cp = c & 0x1F; cp = (cp << 6) | ((unsigned char)text[i+1] & 0x3F); n = 2; }
+        else if ((c & 0xF0) == 0xE0 && i + 2 < text.size())
+        { cp = c & 0x0F; cp = (cp << 6) | ((unsigned char)text[i+1] & 0x3F); cp = (cp << 6) | ((unsigned char)text[i+2] & 0x3F); n = 3; }
+        else if ((c & 0xF8) == 0xF0 && i + 3 < text.size())
+        { cp = c & 0x07; cp = (cp << 6) | ((unsigned char)text[i+1] & 0x3F); cp = (cp << 6) | ((unsigned char)text[i+2] & 0x3F); cp = (cp << 6) | ((unsigned char)text[i+3] & 0x3F); n = 4; }
+        else { ++i; continue; }
+        i += n;
+        if (cp <= 0xFFFF) out.push_back((wchar_t)cp);
+    }
+    return out;
+}
+
+static void drawTextImpact(const std::string& text, float x, float y, float scale, float spacing)
+{
+    (void)spacing;
+    if (!g_impactFontReady)
+    {
+        // The legacy bitmap renderer is used only if Windows font creation failed.
+        return;
+    }
+
+    const std::wstring wide = utf8ToWide(text);
+    glPushAttrib(GL_LIST_BIT | GL_CURRENT_BIT | GL_ENABLE_BIT | GL_TRANSFORM_BIT);
+    glDisable(GL_TEXTURE_2D);
+    glDisable(GL_LIGHTING);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
+    glListBase(g_impactAsciiBase);
+
+    // Font display lists are generated at 96 px. Scale them to the requested HUD size.
+    glPushMatrix();
+    glTranslatef(x, y, 0.0f);
+    glScalef(scale / 6.0f, scale / 6.0f, 1.0f);
+    glRasterPos2f(0.0f, 0.0f);
+
+    size_t pos = 0;
+    while (pos < wide.size())
+    {
+        size_t start = pos;
+        bool cyr = false;
+        if (wide[pos] >= 0x0400 && wide[pos] <= 0x04FF) cyr = true;
+        while (pos < wide.size())
+        {
+            const bool hereCyr = wide[pos] >= 0x0400 && wide[pos] <= 0x04FF;
+            if (hereCyr != cyr) break;
+            ++pos;
+        }
+
+        glListBase(cyr ? g_impactCyrBase - 0x0400 : g_impactAsciiBase);
+        glCallLists((GLsizei)(pos - start), GL_UNSIGNED_SHORT, wide.data() + start);
+    }
+    glPopMatrix();
+    glPopAttrib();
+}
+#endif
+
 static int fontIndex(char c)
 {
     c = (char)std::toupper((unsigned char)c);
@@ -5423,8 +5729,17 @@ static int fontIndex(char c)
     return -1;
 }
 
-static void drawText(const std::string& text, float x, float y, float scale, float spacing = 1.0f)
+static void drawText(const std::string& text, float x, float y, float scale, float spacing)
 {
+#ifdef _WIN32
+    if (g_impactFontReady)
+    {
+        drawTextImpact(text, x, y, scale, spacing);
+        return;
+    }
+#endif
+    // Non-Windows fallback: the original bitmap renderer is intentionally kept
+    // so the source remains portable. On Windows the Impact renderer above is used.
     glBegin(GL_QUADS);
     float pen=x;
     for(size_t i=0;i<text.size();){
@@ -5436,12 +5751,6 @@ static void drawText(const std::string& text, float x, float y, float scale, flo
         else { ++i; pen+=6.0f*scale; continue; }
         i+=consumed;
         if(cp==' '){ pen+=4.0f*scale; continue; }
-        if(cp=='-' || cp==0x2013 || cp==0x2014){ const float w=5*scale; glVertex2f(pen,y+3*scale);glVertex2f(pen+w,y+3*scale);glVertex2f(pen+w,y+4*scale);glVertex2f(pen,y+4*scale);pen+=6*scale;continue; }
-        if(cp==':'){ const float q=scale; glVertex2f(pen+2*q,y+2*q);glVertex2f(pen+3*q,y+2*q);glVertex2f(pen+3*q,y+3*q);glVertex2f(pen+2*q,y+3*q);glVertex2f(pen+2*q,y+5*q);glVertex2f(pen+3*q,y+5*q);glVertex2f(pen+3*q,y+6*q);glVertex2f(pen+2*q,y+6*q);pen+=5*scale;continue; }
-        if(cp=='|'){ const float q=scale; glVertex2f(pen+2*q,y);glVertex2f(pen+3*q,y);glVertex2f(pen+3*q,y+7*q);glVertex2f(pen+2*q,y+7*q);pen+=5*q;continue; }
-        if(cp=='.' || cp=='!'){ const float q=scale; const float yy=(cp=='.')?y:y+scale; glVertex2f(pen+2*q,yy);glVertex2f(pen+3*q,yy);glVertex2f(pen+3*q,yy+q);glVertex2f(pen+2*q,yy+q); if(cp=='!'){glVertex2f(pen+2*q,y+5*q);glVertex2f(pen+3*q,y+5*q);glVertex2f(pen+3*q,y+7*q);glVertex2f(pen+2*q,y+7*q);} pen+=5*scale;continue; }
-        if(cp==',' || cp==';'){ const float q=scale; glVertex2f(pen+2*q,y);glVertex2f(pen+3*q,y);glVertex2f(pen+3*q,y+q);glVertex2f(pen+2*q,y+q); if(cp==';'){glVertex2f(pen+2*q,y+3*q);glVertex2f(pen+3*q,y+3*q);glVertex2f(pen+3*q,y+4*q);glVertex2f(pen+2*q,y+4*q);} pen+=5*scale;continue; }
-        if(cp=='(' || cp==')' || cp=='/' || cp=='\\' || cp=='"'){ pen+=5*scale; continue; }
         int idx=-1; const uint8_t* glyph=nullptr;
         if(cp<128){ idx=fontIndex((char)cp); if(idx>=0) glyph=g_font5x7[idx]; }
         else { int ci=cyrillicIndex(cp); if(ci>=0) glyph=g_cyrFont5x7[ci]; }
@@ -5473,7 +5782,7 @@ static std::vector<std::string> hudMessageLines()
     return lines;
 }
 
-static std::string hudMessageText()
+[[maybe_unused]] static std::string hudMessageText()
 {
     auto lines=hudMessageLines();
     std::string out; for(size_t i=0;i<lines.size();++i){ if(i) out += " | "; out += lines[i]; }
@@ -5927,7 +6236,7 @@ static void drawHUD(
     drawNumber(W-360,H-80,28,std::min(g_storyObjective+1,STORY_BEAT_COUNT));
 
     glColor3f(0.62f,0.70f,0.78f);
-    drawText("F JETPACK  SPACE THRUST", W*0.5f-125.0f, 8.0f, 1.5f, 0.25f);
+    drawText("F: ДЖЕТПАК    ПРОБЕЛ: ТЯГА", W*0.5f-125.0f, 8.0f, 1.5f, 0.25f);
 
     // damage overlay
     if (g_damageFlash > 0.0f)
@@ -5986,6 +6295,206 @@ static void drawHUD(
 }
 
 // ============================================================
+// START MENU / DISPLAY SETTINGS
+// ============================================================
+
+struct DisplaySettings
+{
+    int width = 1280;
+    int height = 720;
+    bool fullscreen = true;
+};
+
+static DisplaySettings g_displaySettings{};
+static int g_menuSelection = 0;
+static bool g_inStartMenu = true;
+static bool g_prevEnter = false;
+static bool g_prevUp = false;
+static bool g_prevDown = false;
+static bool g_prevF11 = false;
+
+static void loadDisplaySettings()
+{
+    std::ifstream in("settings.cfg");
+    if (!in) return;
+    int fs = 1;
+    if (in >> g_displaySettings.width >> g_displaySettings.height >> fs)
+    {
+        if (g_displaySettings.width < 800 || g_displaySettings.width > 7680)
+            g_displaySettings.width = 1280;
+        if (g_displaySettings.height < 600 || g_displaySettings.height > 4320)
+            g_displaySettings.height = 720;
+        g_displaySettings.fullscreen = (fs != 0);
+    }
+}
+
+static void saveDisplaySettings()
+{
+    std::ofstream out("settings.cfg", std::ios::trunc);
+    if (out)
+        out << g_displaySettings.width << ' ' << g_displaySettings.height << ' '
+            << (g_displaySettings.fullscreen ? 1 : 0) << '\n';
+}
+
+static GLFWmonitor* getPrimaryMonitor()
+{
+    return glfwGetPrimaryMonitor();
+}
+
+static void setFullscreenMode(GLFWwindow* window, bool fullscreen)
+{
+    GLFWmonitor* monitor = getPrimaryMonitor();
+    if (!monitor) return;
+
+    if (fullscreen)
+    {
+        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+        if (!mode) return;
+
+        // Keep the user's saved resolution when the monitor supports it.
+        int w = g_displaySettings.width;
+        int h = g_displaySettings.height;
+        int refresh = mode->refreshRate;
+
+        if (w > mode->width || h > mode->height)
+        {
+            w = mode->width;
+            h = mode->height;
+        }
+
+        glfwSetWindowMonitor(window, monitor, 0, 0, w, h, refresh);
+        g_displaySettings.width = w;
+        g_displaySettings.height = h;
+        g_displaySettings.fullscreen = true;
+    }
+    else
+    {
+        int w = std::max(800, g_displaySettings.width);
+        int h = std::max(600, g_displaySettings.height);
+        glfwSetWindowMonitor(window, nullptr, 80, 60, w, h, 0);
+        g_displaySettings.fullscreen = false;
+    }
+
+    saveDisplaySettings();
+}
+
+static void drawStartMenu(int W, int H)
+{
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glOrtho(0, W, 0, H, -1, 1);
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_FOG);
+
+    // Simple dark translucent-style panel (fixed pipeline, no texture required).
+    glColor3f(0.025f, 0.045f, 0.075f);
+    glBegin(GL_QUADS);
+    glVertex2f(0,0); glVertex2f((float)W,0); glVertex2f((float)W,(float)H); glVertex2f(0,(float)H);
+    glEnd();
+
+    const float panelW = std::min(620.0f, W * 0.72f);
+    const float panelH = 420.0f;
+    const float left = W * 0.5f - panelW * 0.5f;
+    const float bottom = H * 0.5f - panelH * 0.5f;
+
+    glColor3f(0.06f, 0.10f, 0.15f);
+    glBegin(GL_QUADS);
+    glVertex2f(left,bottom); glVertex2f(left+panelW,bottom);
+    glVertex2f(left+panelW,bottom+panelH); glVertex2f(left,bottom+panelH);
+    glEnd();
+
+    glColor3f(0.20f,0.55f,0.82f);
+    glBegin(GL_LINE_LOOP);
+    glVertex2f(left,bottom); glVertex2f(left+panelW,bottom);
+    glVertex2f(left+panelW,bottom+panelH); glVertex2f(left,bottom+panelH);
+    glEnd();
+
+    glColor3f(0.92f,0.96f,1.0f);
+    drawText("ФРОНТИР: ШТУРМ", left+105.0f, bottom+315.0f, 6.0f, 0.35f);
+
+    const char* items[3] = { "ИГРАТЬ", "ПОЛНЫЙ ЭКРАН", "ВЫХОД" };
+    for (int i=0;i<3;++i)
+    {
+        const float y = bottom + 215.0f - i*78.0f;
+        if (i == g_menuSelection)
+        {
+            glColor3f(0.12f,0.35f,0.55f);
+            glBegin(GL_QUADS);
+            glVertex2f(left+90,y-12); glVertex2f(left+panelW-90,y-12);
+            glVertex2f(left+panelW-90,y+38); glVertex2f(left+90,y+38);
+            glEnd();
+            glColor3f(0.95f,0.98f,1.0f);
+        }
+        else
+        {
+            glColor3f(0.65f,0.72f,0.80f);
+        }
+        drawText(items[i], left+145.0f, y, 4.0f, 0.25f);
+    }
+
+    glColor3f(0.55f,0.62f,0.70f);
+    drawText("СТРЕЛКИ: ВЫБОР", left+145.0f, bottom+42.0f, 2.1f, 0.15f);
+    drawText("ВВОД: ПОДТВЕРДИТЬ", left+145.0f, bottom+17.0f, 2.1f, 0.15f);
+    drawText(g_displaySettings.fullscreen ? "ПОЛНЫЙ ЭКРАН: ВКЛ" : "ПОЛНЫЙ ЭКРАН: ВЫКЛ",
+             left+145.0f, bottom+70.0f, 2.1f, 0.15f);
+
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_FOG);
+    glPopMatrix();
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
+}
+
+static void updateStartMenu(GLFWwindow* window)
+{
+    const bool up = glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS;
+    const bool down = glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS;
+    const bool enter = glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS;
+    const bool f11 = glfwGetKey(window, GLFW_KEY_F11) == GLFW_PRESS;
+    const bool esc = glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS;
+
+    if (up && !g_prevUp) g_menuSelection = (g_menuSelection + 2) % 3;
+    if (down && !g_prevDown) g_menuSelection = (g_menuSelection + 1) % 3;
+
+    if (enter && !g_prevEnter)
+    {
+        if (g_menuSelection == 0)
+        {
+            g_inStartMenu = false;
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            g_firstMouse = true;
+            if (glfwRawMouseMotionSupported())
+                glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+            resetGame();
+        }
+        else if (g_menuSelection == 1)
+        {
+            setFullscreenMode(window, !g_displaySettings.fullscreen);
+        }
+        else
+        {
+            glfwSetWindowShouldClose(window, GLFW_TRUE);
+        }
+    }
+
+    if (f11 && !g_prevF11)
+        setFullscreenMode(window, !g_displaySettings.fullscreen);
+
+    if (esc)
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
+
+    g_prevUp = up;
+    g_prevDown = down;
+    g_prevEnter = enter;
+    g_prevF11 = f11;
+}
+
+// ============================================================
 // MAIN
 // ============================================================
 
@@ -5999,30 +6508,24 @@ int main()
     {
         fprintf(
             stderr,
-            "Failed to initialize GLFW\n"
+            "Не удалось запустить GLFW\n"
         );
 
         return -1;
     }
 
-    // fullscreen
-    GLFWmonitor* monitor =
-        glfwGetPrimaryMonitor();
+    // Load the saved resolution. First launch defaults to fullscreen at 1280x720.
+    loadDisplaySettings();
+    GLFWmonitor* monitor = g_displaySettings.fullscreen ? getPrimaryMonitor() : nullptr;
 
-    const GLFWvidmode* mode =
-        glfwGetVideoMode(monitor);
-
-    if (!mode)
-    {
-        glfwTerminate();
-        return -1;
-    }
+    if (g_displaySettings.fullscreen && !monitor)
+        g_displaySettings.fullscreen = false;
 
     g_window =
         glfwCreateWindow(
-            mode->width,
-            mode->height,
-            "Simple 3D Shooter - Extended Terrain",
+            g_displaySettings.width,
+            g_displaySettings.height,
+            "Фронтир: Штурм",
             monitor,
             nullptr
         );
@@ -6031,7 +6534,7 @@ int main()
     {
         fprintf(
             stderr,
-            "Failed to create GLFW window\n"
+            "Не удалось создать окно игры\n"
         );
 
         glfwTerminate();
@@ -6043,23 +6546,18 @@ int main()
         g_window
     );
 
+#ifdef _WIN32
+    initImpactFont();
+#endif
+
     glfwSwapInterval(1);
 
-    // mouse
+    // Start in the menu with a normal cursor. Gameplay enables raw mouse input.
     glfwSetInputMode(
         g_window,
         GLFW_CURSOR,
-        GLFW_CURSOR_DISABLED
+        GLFW_CURSOR_NORMAL
     );
-
-    if (glfwRawMouseMotionSupported())
-    {
-        glfwSetInputMode(
-            g_window,
-            GLFW_RAW_MOUSE_MOTION,
-            GLFW_TRUE
-        );
-    }
 
     glfwSetCursorPosCallback(
         g_window,
@@ -6074,13 +6572,15 @@ int main()
     glShadeModel(GL_SMOOTH);
     glEnable(GL_FOG);
     glFogi(GL_FOG_MODE, GL_LINEAR);
-    glHint(GL_FOG_HINT, GL_NICEST);
-    glFogf(GL_FOG_START, 300.0f);
-    glFogf(GL_FOG_END, 640.0f);
+    glHint(GL_FOG_HINT, GL_DONT_CARE);
+    glFogf(GL_FOG_START, 180.0f);
+    glFogf(GL_FOG_END, 340.0f);
 
     glDisable(GL_CULL_FACE);
 
     glEnable(GL_COLOR_MATERIAL);
+
+    initEnvironmentTextures();
 
     // IMPORTANT:
     // player is deliberately placed in an empty area
@@ -6088,8 +6588,7 @@ int main()
     g_pz = 20.0f;
     g_py = currentFloorHeight(g_px, g_pz);
 
-    resetGame();
-
+    // The game starts in the lightweight start menu.
     double lastTime =
         glfwGetTime();
 
@@ -6116,22 +6615,31 @@ int main()
 
         glfwPollEvents();
 
-        if (glfwGetKey(
-                g_window,
-                GLFW_KEY_ESCAPE)
-            == GLFW_PRESS)
+        const bool escapePressed = glfwGetKey(g_window, GLFW_KEY_ESCAPE) == GLFW_PRESS;
+        static bool prevEscape = false;
+        const bool f11Pressed = glfwGetKey(g_window, GLFW_KEY_F11) == GLFW_PRESS;
+        static bool prevF11Gameplay = false;
+
+        if (!g_inStartMenu && escapePressed && !prevEscape)
         {
-            glfwSetWindowShouldClose(
-                g_window,
-                GLFW_TRUE
-            );
+            g_inStartMenu = true;
+            glfwSetInputMode(g_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            g_firstMouse = true;
         }
+        if (!g_inStartMenu && f11Pressed && !prevF11Gameplay)
+            setFullscreenMode(g_window, !g_displaySettings.fullscreen);
+
+        prevEscape = escapePressed;
+        prevF11Gameplay = f11Pressed;
 
         // ----------------------------------------------------
         // UPDATE
         // ----------------------------------------------------
 
-        updateGame(dt);
+        if (g_inStartMenu)
+            updateStartMenu(g_window);
+        else
+            updateGame(dt);
 
         // ----------------------------------------------------
         // VIEWPORT
@@ -6191,15 +6699,16 @@ int main()
         {
             const GLfloat fogColor[] = {0.025f,0.045f,0.075f,1.0f};
             glFogfv(GL_FOG_COLOR, fogColor);
-            glFogf(GL_FOG_START, 300.0f);
-            glFogf(GL_FOG_END, 640.0f);
+            glFogf(GL_FOG_START, 180.0f);
+            glFogf(GL_FOG_END, 340.0f);
         }
 
-        // ----------------------------------------------------
-        // SKY
-        // ----------------------------------------------------
-
-        drawSky();
+        if (g_inStartMenu)
+        {
+            drawStartMenu(W, H);
+            glfwSwapBuffers(g_window);
+            continue;
+        }
 
         // ----------------------------------------------------
         // CAMERA
@@ -6277,6 +6786,11 @@ int main()
             -g_pz
         );
 
+        // Draw the sky only after the real camera matrix is established.
+        // This fixes the old "dark blue patch / image edges" artifact caused
+        // by drawing the sky with the previous frame's modelview matrix.
+        drawSky();
+
         // World-space stars: they are fixed in the game world.
         drawWorldStarField();
 
@@ -6327,9 +6841,16 @@ int main()
         );
     }
 
+    saveDisplaySettings();
+
     glfwDestroyWindow(
         g_window
     );
+
+#ifdef _WIN32
+    destroyImpactFont();
+#endif
+    destroyEnvironmentTextures();
 
     glfwTerminate();
 

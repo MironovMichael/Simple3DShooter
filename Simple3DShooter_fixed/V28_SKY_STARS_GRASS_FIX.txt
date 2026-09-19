@@ -1,0 +1,9 @@
+V28 — SKY / SUN / STARS / GRASS FIX
+
+1. The previous sky image files were removed completely.
+2. The new user-provided sky image is converted into a seamless equirectangular environment texture.
+3. Sky rendering now happens after the camera matrix is set; the previous dark patch and border artifacts are removed.
+4. The sun is a distant world-space object and moves only according to the day/night cycle, not with the player.
+5. Stars use fixed world-space celestial coordinates and no longer use g_px/g_pz as their center.
+6. Grass texture is now 512x512 RGBA with fine alpha blades; grass geometry uses 8 narrow crossed blades and alpha blending.
+7. All project .cpp files pass C++17 syntax-only checking with -Wall -Wextra -Wpedantic using local OpenGL/GLFW stubs.

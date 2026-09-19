@@ -40,5 +40,9 @@ target_link_options(${PROJECT_NAME} PRIVATE
 
 target_link_libraries(${PROJECT_NAME} PRIVATE glfw OpenGL::GL)
 
+if(WIN32)
+    target_link_libraries(${PROJECT_NAME} PRIVATE gdi32)
+endif()
+
 
 # V25 quality-pass notes are documented in V25_FILE_AUDIT.txt.

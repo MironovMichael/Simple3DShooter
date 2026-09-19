@@ -1,0 +1,15 @@
+V29 PERFORMANCE OPTIMIZATION
+
+- Reduced terrain render distance to 260 units and terrain grid from 176/80 to 64 cells.
+- Terrain is rendered in one GL_QUADS batch instead of one draw call per terrain cell.
+- Reduced object render distance to 210 units.
+- Reduced enemy render distance to 200 units with simplified distant enemy LOD.
+- Reduced decorative vegetation density and extra clumps.
+- Reduced sky dome tessellation to 64x20 and stars to 350.
+- Reduced winter snow particles to 220.
+- Reduced grass cluster geometry to four blades and batched its quads.
+- Reduced fog quality from GL_NICEST to GL_DONT_CARE.
+- Default window resolution is capped at 1280x720 and is windowed to avoid rendering a 4K fullscreen surface.
+- Reduced sky texture to 2048x1024 and grass texture to 256x256 to lower VRAM use.
+
+The goal is a stable low-end performance profile while retaining the main gameplay systems.

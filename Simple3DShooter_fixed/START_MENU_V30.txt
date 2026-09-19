@@ -1,0 +1,16 @@
+V30 - START MENU AND FULLSCREEN
+
+- The game starts in a simple keyboard-controlled menu.
+- First launch defaults to fullscreen at 1280x720.
+- Resolution and fullscreen state are stored in settings.cfg.
+- The saved resolution is reused on the next launch.
+- Enter starts the game.
+- Up/Down selects menu items.
+- F11 toggles fullscreen at any time.
+- Escape returns from gameplay to the menu; Escape in the menu exits.
+- The menu does not run gameplay updates while it is open.
+
+settings.cfg format:
+WIDTH HEIGHT FULLSCREEN
+Example:
+1280 720 1
