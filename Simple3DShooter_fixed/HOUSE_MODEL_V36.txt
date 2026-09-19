@@ -1,0 +1,12 @@
+HOUSE MODEL UPDATE
+
+All settlement houses now use the user-provided 3D OBJ model:
+8BM0QAFQHTA8FB6A88C2K81F3.obj
+
+The original procedural house geometry is kept only as invisible collision
+volumes, so doors/cover/collision do not disappear. The supplied model is
+scaled to approximately 12.1 x 6.9 x 15 world units and aligned to terrain.
+
+The JPG materials from the archive were converted to BMP because the game
+already has a small dependency-free BMP loader. No new third-party runtime
+library is required.

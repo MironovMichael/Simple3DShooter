@@ -50,7 +50,12 @@
 #include <cstdint>
 #include <cctype>
 #include <fstream>
+#include <sstream>
 #include <cstring>
+
+#ifdef _WIN32
+#include <mmsystem.h>
+#endif
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -67,6 +72,51 @@ static void createCityBiome();
 
 static GLuint g_earthSkyTexture = 0;
 static GLuint g_grassTexture = 0;
+
+#ifdef _WIN32
+static bool g_musicPlaying = false;
+
+static std::wstring moduleDirectory()
+{
+    wchar_t buf[MAX_PATH]{};
+    const DWORD n=GetModuleFileNameW(nullptr,buf,MAX_PATH);
+    if(n==0 || n>=MAX_PATH) return L".";
+    std::wstring p(buf,n);
+    const size_t slash=p.find_last_of(L"\\/");
+    return slash==std::wstring::npos ? L"." : p.substr(0,slash);
+}
+
+static bool startGameMusic()
+{
+    const std::wstring exeDir=moduleDirectory();
+    const std::wstring paths[]={
+        L"assets\\music\\BeepBox-Song.wav",
+        L"..\\assets\\music\\BeepBox-Song.wav",
+        exeDir+L"\\assets\\music\\BeepBox-Song.wav",
+        exeDir+L"\\..\\assets\\music\\BeepBox-Song.wav"
+    };
+    for(const auto& path:paths)
+    {
+        const DWORD attr=GetFileAttributesW(path.c_str());
+        if(attr==INVALID_FILE_ATTRIBUTES || (attr&FILE_ATTRIBUTE_DIRECTORY)) continue;
+        if(PlaySoundW(path.c_str(),nullptr,SND_FILENAME|SND_ASYNC|SND_LOOP|SND_NODEFAULT))
+        {
+            g_musicPlaying=true;
+            return true;
+        }
+    }
+    return false;
+}
+
+static void stopGameMusic()
+{
+    if(g_musicPlaying)
+    {
+        PlaySoundW(nullptr,nullptr,0);
+        g_musicPlaying=false;
+    }
+}
+#endif
 
 static GLuint loadBMPTexture(const char* path)
 {
@@ -93,6 +143,100 @@ static GLuint loadBMPTexture(const char* path)
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_REPEAT); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP);
     glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,rgba.data()); glBindTexture(GL_TEXTURE_2D,0); return tex;
+}
+
+// ============================================================
+// HOUSE 3D MODEL - user supplied OBJ
+// ============================================================
+struct HouseModelVertex { float x,y,z,u,v; int material; };
+static std::vector<HouseModelVertex> g_houseModelTriangles;
+static GLuint g_houseModelTextures[9]{};
+static bool g_houseModelReady=false;
+
+static bool loadHouseModelOBJ(const char* path)
+{
+    std::ifstream file(path); if(!file) return false;
+    std::vector<std::array<float,3>> pos; std::vector<std::array<float,2>> uv;
+    std::string line; int mat=0;
+    while(std::getline(file,line)) {
+        std::istringstream is(line); std::string tag; is>>tag;
+        if(tag=="v") { float x,y,z; if(is>>x>>y>>z) pos.push_back({x,y,z}); }
+        else if(tag=="vt") { float u,v; if(is>>u>>v) uv.push_back({u,v}); }
+        else if(tag=="usemtl") {
+            std::string n; is>>n;
+            if(n.rfind("mat_",0)==0) { size_t d=n.find('-',4); try { mat=std::stoi(n.substr(4,d==std::string::npos?std::string::npos:d-4)); } catch(...) {mat=0;} }
+            mat=std::max(0,std::min(8,mat));
+        } else if(tag=="f") {
+            std::vector<std::string> refs; std::string r; while(is>>r) refs.push_back(r);
+            for(size_t k=1;k+1<refs.size();++k) for(const std::string& q:{refs[0],refs[k],refs[k+1]}) {
+                size_t a=q.find('/'), b=a==std::string::npos?std::string::npos:q.find('/',a+1);
+                int vi=std::atoi((a==std::string::npos?q:q.substr(0,a)).c_str());
+                int ti=(a==std::string::npos?0:std::atoi(q.substr(a+1,b==std::string::npos?std::string::npos:b-a-1).c_str()));
+                if(vi<0) vi=(int)pos.size()+vi+1; if(ti<0) ti=(int)uv.size()+ti+1;
+                if(vi<=0 || vi>(int)pos.size()) continue;
+                auto p=pos[(size_t)vi-1]; float u=0,v=0; if(ti>0&&ti<=(int)uv.size()){u=uv[(size_t)ti-1][0];v=uv[(size_t)ti-1][1];}
+                g_houseModelTriangles.push_back({p[0],p[1],p[2],u,v,mat});
+            }
+        }
+    }
+    return !g_houseModelTriangles.empty();
+}
+static GLuint loadHouseTexture(const char* n){ std::string a="assets/house_model/"+std::string(n); GLuint t=loadBMPTexture(a.c_str()); if(!t){std::string b="../assets/house_model/"+std::string(n);t=loadBMPTexture(b.c_str());} return t; }
+static void initHouseModel()
+{
+    g_houseModelTriangles.clear();
+    if(!loadHouseModelOBJ("assets/house_model/8BM0QAFQHTA8FB6A88C2K81F3.obj") && !loadHouseModelOBJ("../assets/house_model/8BM0QAFQHTA8FB6A88C2K81F3.obj")) return;
+    const char* tx[9]={"D5006L4.bmp","D5006L3.bmp","D5006L2.bmp","D5006L.bmp","default-grey.bmp","D5006B3.bmp","D5006BR.bmp","default-grey.bmp","default-grey.bmp"};
+    for(int i=0;i<9;++i) g_houseModelTextures[i]=loadHouseTexture(tx[i]);
+    g_houseModelReady=true;
+}
+static void destroyHouseModel(){for(GLuint& t:g_houseModelTextures){if(t)glDeleteTextures(1,&t);t=0;}g_houseModelTriangles.clear();g_houseModelReady=false;}
+static void drawHouseModel(float x,float baseY,float z,float yaw)
+{
+    if(!g_houseModelReady || g_houseModelTriangles.empty()) return;
+
+    // OBJ triangles are stored as three consecutive vertices. Rendering one
+    // vertex per GL_TRIANGLES begin/end produces incomplete primitives and
+    // makes the entire model invisible. Render complete triangles in batches.
+    constexpr float S=6.0f;
+    constexpr float MODEL_MIN_X=-1.01243f;
+    constexpr float MODEL_MAX_X= 1.01243f;
+    constexpr float MODEL_MIN_Z=-1.25f;
+    constexpr float MODEL_MAX_Z= 1.25f;
+    constexpr float MODEL_MIN_Y=-0.571358f;
+
+    glPushMatrix();
+    glTranslatef(x,baseY,z);
+    glRotatef(yaw*57.2958f,0,1,0);
+    glScalef(S,S,S);
+    glTranslatef(-(MODEL_MIN_X+MODEL_MAX_X)*0.5f, -MODEL_MIN_Y,
+                 -(MODEL_MIN_Z+MODEL_MAX_Z)*0.5f);
+
+    glEnable(GL_TEXTURE_2D);
+    glTexEnvi(GL_TEXTURE_ENV,GL_TEXTURE_ENV_MODE,GL_MODULATE);
+    glColor3f(1.0f,1.0f,1.0f);
+
+    int cur=g_houseModelTriangles.front().material;
+    glBindTexture(GL_TEXTURE_2D, g_houseModelTextures[std::max(0,std::min(8,cur))]);
+    glBegin(GL_TRIANGLES);
+    for(const auto& v:g_houseModelTriangles)
+    {
+        if(v.material!=cur)
+        {
+            glEnd();
+            cur=v.material;
+            const GLuint t=g_houseModelTextures[std::max(0,std::min(8,cur))];
+            glBindTexture(GL_TEXTURE_2D,t);
+            glBegin(GL_TRIANGLES);
+        }
+        glTexCoord2f(v.u,1.0f-v.v);
+        glVertex3f(v.x,v.y,v.z);
+    }
+    glEnd();
+
+    glBindTexture(GL_TEXTURE_2D,0);
+    glDisable(GL_TEXTURE_2D);
+    glPopMatrix();
 }
 
 static void initEnvironmentTextures()
@@ -521,7 +665,8 @@ enum ObjectType
     OBJECT_BUILDING,
     OBJECT_SKYSCRAPER,
     OBJECT_ROCKET_AMMO,
-    OBJECT_HOUSE_ROOF
+    OBJECT_HOUSE_ROOF,
+    OBJECT_HOUSE_MODEL
 };
 
 struct WorldObject
@@ -1395,7 +1540,7 @@ static float playerFloorHeight(float x, float z)
     for (const auto& o : g_objects)
     {
         if (!o.active || o.world != g_world) continue;
-        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT) continue;
+        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT || o.type == OBJECT_HOUSE_MODEL) continue;
         if (underground && o.type == OBJECT_HOUSE_ROOF) continue;
         if (!pointInsideBox(x,z,o,PLAYER_RADIUS*0.35f)) continue;
         const float top=o.y+o.sy*0.5f;
@@ -1414,7 +1559,7 @@ static bool playerInsideStepableObstacle(float x, float z)
     for (const auto& o : g_objects)
     {
         if (!o.active || o.world != g_world) continue;
-        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT) continue;
+        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT || o.type == OBJECT_HOUSE_MODEL) continue;
         if (!playerCollidesWithObject(x,z,o,PLAYER_RADIUS)) continue;
         const float top=o.y+o.sy*0.5f;
         if (o.type == OBJECT_TREE) continue;
@@ -1451,13 +1596,24 @@ static bool playerBlocked(float x, float z)
     for (const auto& o : g_objects)
     {
         if (!o.active || o.world != g_world) continue;
-        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT) continue;
+        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT || o.type == OBJECT_HOUSE_MODEL) continue;
         if (playerCollidesWithObject(x, z, o, PLAYER_RADIUS))
         {
+            const float bottom=o.y-o.sy*0.5f;
             const float top=o.y+o.sy*0.5f;
-            // While airborne, allow the player to pass over an obstacle once
-            // the feet are above its top. This is what makes jumping onto
-            // crates/cover possible without disabling side collision.
+
+            // Roofs use a vertical collision test: at ground level the player
+            // can enter through the doorway, while the slab blocks the body
+            // when jumping into it and acts as a collision surface above.
+            if(o.type == OBJECT_HOUSE_ROOF)
+            {
+                const float playerBottom=g_py;
+                const float playerTop=g_py+PLAYER_HEIGHT;
+                if(playerTop <= bottom+0.03f || playerBottom >= top-0.03f)
+                    continue;
+                return true;
+            }
+
             if(!g_onGround && g_py>=top-0.05f) continue;
             return true;
         }
@@ -1771,18 +1927,8 @@ static void drawGableRoofMesh(float x, float y, float z, float w, float d, float
     glEnd();
 }
 
-static void drawHouseRoof(float x, float y, float z, float w, float d, float yaw)
-{
-    // Solid, conventional gable roof: a real triangular prism rather than
-    // rotated cuboids, so the roof can never appear upside-down.
-    drawGableRoofMesh(x, y, z, w+1.8f, d+1.4f, 2.7f, yaw);
-    const float c=cosf(yaw), si=sinf(yaw);
-    const float rx=x, rz=z;
-    glPushMatrix(); glTranslatef(rx, y+2.55f, rz); glRotatef(yaw*57.2958f,0,1,0);
-    drawBox(0,0,0,0.35f,0.35f,d+1.55f,0.13f,0.055f,0.025f);
-    glPopMatrix();
-    (void)c; (void)si;
-}
+static void drawHouseRoof(float x,float y,float z,float w,float d,float yaw)
+{ (void)x; (void)y; (void)z; (void)w; (void)d; (void)yaw; }
 
 static void addHouse(float cx, float cz, float rotation = 0.0f)
 {
@@ -1805,7 +1951,9 @@ static void addHouse(float cx, float cz, float rotation = 0.0f)
     // Door lintel.
     addPart(0,-D*0.5f,DOOR,1.5f,T);
     // Roof collision volume is conservative and positioned at the actual roof base.
-    g_objects.push_back({OBJECT_HOUSE_ROOF,cx,H+0.35f,cz,W+1.8f,5.4f,D+1.4f,true,WORLD_MAIN,rotation});
+    // Thin roof slab: blocks jumping through the roof without sealing the doorway.
+    g_objects.push_back({OBJECT_HOUSE_ROOF,cx,H-0.02f,cz,W+1.8f,0.55f,D+1.4f,true,WORLD_MAIN,rotation});
+    g_objects.push_back({OBJECT_HOUSE_MODEL,cx,0.0f,cz,12.15f,6.85f,15.0f,true,WORLD_MAIN,rotation});
 }
 
 // ============================================================
@@ -2258,7 +2406,8 @@ static void shoot()
 
             if (o.type == OBJECT_AMMO ||
                 o.type == OBJECT_ROCKET_AMMO ||
-                o.type == OBJECT_MEDKIT)
+                o.type == OBJECT_MEDKIT ||
+                o.type == OBJECT_HOUSE_MODEL)
                 continue;
 
             float t;
@@ -2581,15 +2730,20 @@ static void createWorld()
     // Settlements: large enterable houses with door openings.
     // Each cluster has several buildings so the player can break line of sight
     // and move from house to house under cover.
+    // 8 settlements x 4 houses = 32 visible 3D houses. They are kept
+    // outside the skyscraper biome so the city cannot hide/overlap them.
     const float settlements[][2] = {
-        {-150.0f,-120.0f}, {145.0f,-105.0f}, {-155.0f,115.0f},
-        {150.0f,125.0f}, {0.0f,155.0f}
+        {-220.0f,-190.0f}, {-220.0f,170.0f},
+        {-20.0f,220.0f},   {20.0f,-235.0f},
+        {205.0f,150.0f},   {205.0f,35.0f},
+        {-350.0f,-20.0f},  {360.0f,110.0f}
     };
     for (const auto& s : settlements)
     {
-        addHouse(s[0], s[1], 0.0f);
-        addHouse(s[0] + 20.0f, s[1] + 4.0f, 0.12f);
-        addHouse(s[0] - 17.0f, s[1] + 17.0f, -0.10f);
+        addHouse(s[0],       s[1],       0.00f);
+        addHouse(s[0] + 21.0f, s[1] + 5.0f,  0.12f);
+        addHouse(s[0] - 18.0f, s[1] + 20.0f, -0.10f);
+        addHouse(s[0] + 4.0f,  s[1] - 23.0f, 0.07f);
     }
 
     // Separate city biome with 26 detailed skyscrapers and conservative AABB hitboxes.
@@ -2624,7 +2778,9 @@ static void createWorld()
                 ? tunnelFloorHeight(o.x,o.z)
                 : terrainSupportHeight(o.x, o.z, std::max(o.sx, o.sz) * 0.5f);
             if (o.type == OBJECT_HOUSE_ROOF)
-                o.y = support + 5.5f + 0.25f;
+                o.y = support + 6.8f - 0.02f;
+            else if (o.type == OBJECT_HOUSE_MODEL)
+                o.y = support;
             else
                 o.y = support + o.sy * 0.5f;
         }
@@ -4133,7 +4289,7 @@ static bool portalDestinationClear(int world, float x, float z, float radius)
     for (const auto& o : g_objects)
     {
         if (!o.active || o.world != world) continue;
-        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT) continue;
+        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT || o.type == OBJECT_HOUSE_MODEL) continue;
         const float hx = o.sx * 0.5f + radius;
         const float hz = o.sz * 0.5f + radius;
         if (fabsf(x - o.x) <= hx && fabsf(z - o.z) <= hz)
@@ -4532,43 +4688,7 @@ static void drawDecor()
     }
 }
 
-static void drawHouseDetails()
-{
-    for (const auto& o : g_objects)
-    {
-        if (!o.active || o.world != g_world || o.type != OBJECT_HOUSE_ROOF) continue;
-        const float W=o.sx-1.8f, D=o.sz-1.4f, H=6.8f;
-        const float c=cosf(o.yaw), si=sinf(o.yaw);
-        auto tr=[&](float lx,float ly,float lz,float& x,float& y,float& z){ x=o.x+lx*c-lz*si; y=ly; z=o.z+lx*si+lz*c; };
-        float x,y,z;
-        // Door with canopy and steps.
-        tr(0,1.45f,-D*0.5f-0.10f,x,y,z); drawBox(x,y,z,2.35f,2.9f,0.14f,0.16f,0.09f,0.055f);
-        tr(0,3.0f,-D*0.5f-0.15f,x,y,z); drawBox(x,y,z,3.2f,0.18f,0.45f,0.25f,0.12f,0.06f);
-        // Four broad windows, each with cross mullions.
-        for(float lx : {-4.1f,4.1f}) for(float ly : {2.7f,5.0f}) {
-            tr(lx,ly,-D*0.5f-0.11f,x,y,z); drawBox(x,y,z,2.35f,1.45f,0.10f,0.08f,0.38f,0.62f);
-            tr(lx,ly,-D*0.5f-0.18f,x,y,z); drawBox(x,y,z,0.10f,1.45f,0.06f,0.70f,0.76f,0.76f); drawBox(x,y,z,2.35f,0.10f,0.06f,0.70f,0.76f,0.76f);
-        }
-        // Side windows and gutters.
-        for(float sideX : {-W*0.5f-0.12f,W*0.5f+0.12f}) {
-            tr(sideX,3.6f,1.0f,x,y,z); glPushMatrix(); glTranslatef(x,y,z); glRotatef(o.yaw*57.2958f,0,1,0); drawBox(0,0,0,0.10f,1.7f,2.0f,0.08f,0.38f,0.62f); glPopMatrix();
-        }
-        tr(0,H+0.25f,-D*0.5f-0.65f,x,y,z); glPushMatrix(); glTranslatef(x,y,z); glRotatef(o.yaw*57.2958f,0,1,0); drawBox(0,0,0,W+2.2f,0.22f,0.18f,0.12f,0.055f,0.03f); glPopMatrix();
-        // Deep eaves, porch railing and a small second-floor balcony make
-        // the house silhouette read as a real structure instead of stacked boxes.
-        for(float sideZ : {-D*0.5f-0.42f, D*0.5f+0.42f}) {
-            tr(0,H+0.12f,sideZ,x,y,z); glPushMatrix(); glTranslatef(x,y,z); glRotatef(o.yaw*57.2958f,0,1,0); drawBox(0,0,0,W+1.9f,0.28f,0.32f,0.18f,0.07f,0.035f); glPopMatrix();
-        }
-        tr(0,3.15f,-D*0.5f-1.18f,x,y,z); glPushMatrix(); glTranslatef(x,y,z); glRotatef(o.yaw*57.2958f,0,1,0);
-        drawBox(-1.85f,0.0f,0,0.10f,1.15f,0.10f,0.28f,0.17f,0.10f);
-        drawBox( 1.85f,0.0f,0,0.10f,1.15f,0.10f,0.28f,0.17f,0.10f);
-        drawBox(0,0.48f,0,3.8f,0.10f,0.10f,0.28f,0.17f,0.10f);
-        glPopMatrix();
-        tr(0,5.85f,-D*0.5f-0.35f,x,y,z); glPushMatrix(); glTranslatef(x,y,z); glRotatef(o.yaw*57.2958f,0,1,0); drawBox(0,0,0,4.8f,0.16f,1.55f,0.22f,0.11f,0.055f); glPopMatrix();
-        // Chimney with cap.
-        tr(W*0.22f,H+1.35f,0.6f,x,y,z); glPushMatrix(); glTranslatef(x,y,z); glRotatef(o.yaw*57.2958f,0,1,0); drawBox(0,0,0,0.95f,2.6f,0.95f,0.22f,0.19f,0.17f); drawBox(0,1.35f,0,1.12f,0.16f,1.12f,0.12f,0.10f,0.08f); glPopMatrix();
-    }
-}
+static void drawHouseDetails() {}
 
 static void drawWinterSnowAndAtmosphere()
 {
@@ -4863,16 +4983,19 @@ static void drawWorld()
             continue;
 
         const float odx=o.x-g_px, odz=o.z-g_pz;
-        if(odx*odx+odz*odz > OBJECT_RENDER_DISTANCE*OBJECT_RENDER_DISTANCE)
+        const float objectRenderDistance =
+            (o.type == OBJECT_HOUSE_MODEL || o.type == OBJECT_HOUSE_ROOF || o.type == OBJECT_BUILDING)
+                ? 420.0f : OBJECT_RENDER_DISTANCE;
+        if(odx*odx+odz*odz > objectRenderDistance*objectRenderDistance)
             continue;
 
-        if (o.type == OBJECT_BUILDING)
+        if (o.type == OBJECT_BUILDING || o.type == OBJECT_HOUSE_ROOF)
         {
-            drawBuildingWall(o);
+            // Invisible house collision geometry.
         }
-        else if (o.type == OBJECT_HOUSE_ROOF)
+        else if (o.type == OBJECT_HOUSE_MODEL)
         {
-            drawHouseRoof(o.x, o.y, o.z, o.sx, o.sz, o.yaw);
+            drawHouseModel(o.x,o.y,o.z,o.yaw);
         }
         else if (o.type == OBJECT_SKYSCRAPER)
         {
@@ -6775,6 +6898,11 @@ int main()
     }
     glfwSwapInterval(1);
 
+#ifdef _WIN32
+    // Loop the uploaded BeepBox WAV continuously from the menu through gameplay.
+    startGameMusic();
+#endif
+
     // Start in the menu with a normal cursor. Gameplay enables raw mouse input.
     glfwSetInputMode(
         g_window,
@@ -6804,6 +6932,7 @@ int main()
     glEnable(GL_COLOR_MATERIAL);
 
     initEnvironmentTextures();
+    initHouseModel();
 
     // IMPORTANT:
     // player is deliberately placed in an empty area
@@ -7066,6 +7195,10 @@ int main()
 
     saveDisplaySettings();
 
+#ifdef _WIN32
+    stopGameMusic();
+#endif
+
     glfwDestroyWindow(
         g_window
     );
@@ -7073,6 +7206,7 @@ int main()
 #ifdef _WIN32
     destroyImpactFont();
 #endif
+    destroyHouseModel();
     destroyEnvironmentTextures();
 
     glfwTerminate();

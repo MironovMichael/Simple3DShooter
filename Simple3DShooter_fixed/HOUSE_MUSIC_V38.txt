@@ -1,0 +1,7 @@
+V38 FIX
+
+- Fixed OBJ house rendering: GL_TRIANGLES now receives complete 3-vertex primitives.
+- Added 32 visible 3D houses in 8 settlements (more than the previous 15).
+- House models render to 420 units so they remain visible at settlement distance.
+- Wall collision remains active. Roof collision is now a thin 3D slab: ground-floor doorway access remains possible, while jumping into/through the roof is blocked and the roof can be landed on.
+- Added BeepBox-Song.wav to assets/music and enabled continuous looping playback using WinMM/PlaySoundW.

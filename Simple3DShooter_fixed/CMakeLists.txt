@@ -41,7 +41,7 @@ target_link_options(${PROJECT_NAME} PRIVATE
 target_link_libraries(${PROJECT_NAME} PRIVATE glfw OpenGL::GL)
 
 if(WIN32)
-    target_link_libraries(${PROJECT_NAME} PRIVATE gdi32)
+    target_link_libraries(${PROJECT_NAME} PRIVATE gdi32 winmm)
 endif()
 
 

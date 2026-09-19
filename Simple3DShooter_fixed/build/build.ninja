@@ -157,7 +157,7 @@ build Simple3DShooter.exe: CXX_EXECUTABLE_LINKER__Simple3DShooter_Release CMakeF
   CONFIG = Release
   FLAGS = -O3 -DNDEBUG
   LINK_FLAGS = -Wl,--gc-sections
-  LINK_LIBRARIES = C:/msys64/ucrt64/lib/libglfw3.dll.a  -lopengl32  -lgdi32  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
+  LINK_LIBRARIES = C:/msys64/ucrt64/lib/libglfw3.dll.a  -lopengl32  -lgdi32  -lwinmm  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
   OBJECT_DIR = CMakeFiles\Simple3DShooter.dir
   POST_BUILD = cd .
   PRE_LINK = cd .
