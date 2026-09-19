@@ -390,38 +390,8 @@ static constexpr float OBJECT_RENDER_DISTANCE = 210.0f;
 static constexpr float ENEMY_RENDER_DISTANCE = 200.0f;
 // PERFORMANCE PROFILE: bounded view distances, batched terrain, low-detail distant enemies.
 
-static int g_storyStage = 0;
-static float g_storyTimer = 7.0f;
-static int g_storyObjective = 0;
-
-struct StoryBeat {
-    const char* transmission;
-    const char* objective;
-    int worldHint;
-};
-
-static const StoryBeat g_storyBeats[] = {
-    {"ОПЕРАЦИЯ РАЗЛОМ. ПОГРАНИЧНЫЙ ГАРНИЗОН ПОТЕРЯН. ВЫ ВЫСАЖИВАЕТЕСЬ НА ЗЕМЛЕ.", "Зачистите зону высадки и удерживайте периметр.", WORLD_MAIN},
-    {"РАЗВЕДКА: ПОД ЗЕМЛЕЙ ОБНАРУЖЕНЫ ТРИ ЭНЕРГЕТИЧЕСКИХ СИГНАЛА.", "Уничтожьте 10 противников и найдите вход в подземную сеть.", WORLD_MAIN},
-    {"АРХИВ: СТАРЫЕ ТОННЕЛИ ОКРУЖАЮТ НЕИЗВЕСТНОЕ ЯДРО РАЗЛОМА.", "Пройдите тоннели и восстановите питание первого узла.", WORLD_MAIN},
-    {"БРОНИРОВАННАЯ КОЛОННА ВРАГА ИДЕТ К ГОРОДУ. ЕЕ МАШИНЫ НЕСУТ МЕТКИ РАЗЛОМА.", "Уничтожьте 5 танков и остановите колонну.", WORLD_MAIN},
-    {"ВОСТОЧНЫЙ ПОРТАЛ СТАБИЛИЗИРОВАН. ЗА НИМ ОБНАРУЖЕН НЕИЗВЕСТНЫЙ МОРСКОЙ МИР.", "Доберитесь до портала и перейдите в морской мир.", WORLD_MAIN},
-    {"МОРСКОЙ МИР: НЕБО ПАТРУЛИРУЮТ ГИГАНТСКИЕ СУБМАРИНЫ. ВРАГ ГОТОВИТ РАКЕТНЫЙ УДАР.", "Найдите боеприпасы и уничтожьте вражеские субмарины.", WORLD_OCEAN},
-    {"ПЕРЕХВАТ: ВРАЖЕСКИЕ РАКЕТЫ МОЖНО СБИВАТЬ ОГНЕМ. НЕ ДАЙТЕ ИМ ДОСТИЧЬ ЦЕЛИ.", "Сбейте 6 вражеских ракет.", WORLD_OCEAN},
-    {"ЗИМНИЙ ПОРТАЛ ОТКРЫТ. СИГНАЛ ЯДРА ПЕРЕШЕЛ В СНЕЖНЫЙ МИР.", "Перейдите в зимний мир и найдите северный маяк.", WORLD_WINTER},
-    {"СЕВЕРНЫЙ МАЯК: СИГНАЛ ПЕРЕДАЕТ КООРДИНАТЫ СТАРОГО УЗЛА.", "Доберитесь до маяка и восстановите связь.", WORLD_WINTER},
-    {"РАЗЛОМ РАСТЕТ. ТРИ МИРА НАЧАЛИ СИНХРОНИЗИРОВАТЬСЯ.", "Вернитесь на Землю через обратный портал.", WORLD_MAIN},
-    {"КОМАНДОВАНИЕ: ВРАГ СОБИРАЕТ УДАРНУЮ ГРУППУ У ЦЕНТРАЛЬНОГО УЗЛА.", "Уничтожьте ударную группу и защитите узел.", WORLD_MAIN},
-    {"ЯДРО ОТКЛИКАЕТСЯ НА ВАШЕ СНАРЯЖЕНИЕ. ПРОТОКОЛ ЗАКРЫТИЯ ГОТОВ.", "Доберитесь до ядра и активируйте протокол.", WORLD_MAIN},
-    {"ПРОТОКОЛ ЗАПУЩЕН. ПОЛЕ РАЗЛОМА СЖИМАЕТСЯ, НО ВРАГ ПРОРЫВАЕТ ПЕРИМЕТР.", "Удерживайте командную зону до конца эвакуации.", WORLD_MAIN},
-    {"ЭВАКУАЦИЯ: СВЯЗЬ ВОССТАНОВЛЕНА. РАЗЛОМ НАЧИНАЕТ ЗАКРЫВАТЬСЯ.", "Достигните периметра эвакуации.", WORLD_MAIN},
-    {"ЭПИЛОГ: ЗЕМЛЯ СНОВА ПОЛУЧАЕТ ЧИСТЫЙ СИГНАЛ. НО ОДИН МАЯК ВСЕ ЕЩЕ МИГАЕТ.", "Операция завершена. Исследуйте мир и найдите следы Разлома.", WORLD_MAIN}
-};
-
-static constexpr int STORY_BEAT_COUNT = sizeof(g_storyBeats) / sizeof(g_storyBeats[0]);
-
 static std::string g_message =
-    "ОПЕРАЦИЯ «РАЗЛОМ»: ВЫЖИВИТЕ И ЗАЩИТИТЕ ГРАНИЦУ.";
+    "ИГРА НАЧАТА. УНИЧТОЖАЙТЕ ВРАГОВ И ИССЛЕДУЙТЕ МИР.";
 
 // ============================================================
 // WEAPONS
@@ -2055,7 +2025,7 @@ static void respawnPlayer()
     g_deadTimer = 0.0f;
     g_damageFlash = 0.0f;
     g_firstMouse = true;
-    g_message = "ВОЗРОЖДЕНИЕ - ПРОДОЛЖАЙТЕ БОЙ.";
+    g_message.clear();
 }
 
 static void damagePlayer(float damage)
@@ -2072,7 +2042,7 @@ static void damagePlayer(float damage)
         g_vy = 0.0f;
         g_onGround = true;
         g_deadTimer = 3.0f;
-        g_message = "ВЫ ПОГИБЛИ - ВОЗРОЖДЕНИЕ...";
+        g_message.clear();
     }
 }
 
@@ -2093,9 +2063,7 @@ static void switchWeapon(int index)
 
     g_weaponRecoil = 0.0f;
 
-    g_message =
-        std::string("ОРУЖИЕ: ") +
-        g_weapons[index].name;
+    g_message.clear();
 }
 
 // ============================================================
@@ -2119,7 +2087,7 @@ static void reloadWeapon()
     w.reloadTimer =
         w.reloadTime;
 
-    g_message = "ПЕРЕЗАРЯДКА...";
+    g_message.clear();
 }
 
 // ============================================================
@@ -2151,7 +2119,7 @@ static void updateReload(float dt)
 
         w.reserve -= take;
 
-        g_message = "ГОТОВ.";
+        g_message.clear();
     }
 }
 
@@ -2188,10 +2156,10 @@ static void shoot()
 
     if (g_currentWeapon == WEAPON_ROCKET)
     {
-        if (g_world != WORLD_OCEAN) { g_currentWeapon=WEAPON_PISTOL; g_message="РАКЕТНИЦА ДОСТУПНА ТОЛЬКО В МОРСКОМ МИРЕ."; return; }
+        if (g_world != WORLD_OCEAN) { g_currentWeapon=WEAPON_PISTOL; return; }
         if (w.cooldown > 0.0f) return;
         if (w.ammo <= 0) { reloadWeapon(); return; }
-        w.ammo--; w.cooldown=w.fireDelay; g_weaponRecoil=w.recoil; g_muzzleFlash=1.0f; spawnPlayerRocket(); g_message="РАКЕТА ЗАПУЩЕНА."; return;
+        w.ammo--; w.cooldown=w.fireDelay; g_weaponRecoil=w.recoil; g_muzzleFlash=1.0f; spawnPlayerRocket(); return;
     }
 
     if (w.cooldown > 0.0f)
@@ -2373,7 +2341,7 @@ static void shoot()
                     rp.active = false;
                     spawnExplosion(rp.x,rp.y,rp.z,4.5f,0.0f,false,false);
                     g_hitMarker = 1.0f;
-                    g_message = "ВРАЖЕСКАЯ РАКЕТА СБИТА!";
+                    g_message.clear();
                 }
             }
             continue;
@@ -2389,7 +2357,7 @@ static void shoot()
             e.hitFlash = 1.0f;
             g_hitMarker = 1.0f;
             if (bestHeadshot)
-                g_message = "ПОПАДАНИЕ В ГОЛОВУ!";
+                g_message.clear();
 
             if (e.hp <= 0.0f)
             {
@@ -2408,20 +2376,17 @@ static void shoot()
 
                 if (g_kills == 1)
                 {
-                    g_message =
-                        "ХОРОШЕЕ ПОПАДАНИЕ. ПРИБЛИЖАЮТСЯ НОВЫЕ ПРОТИВНИКИ.";
+                    g_message = "ВРАГ УНИЧТОЖЕН!";
                 }
 
                 if (g_kills == 5)
                 {
-                    g_message =
-                        "КОМАНДОВАНИЕ: ОБНАРУЖЕНА ТЯЖЁЛАЯ БОЕВАЯ ЕДИНИЦА.";
+                    g_message = "ВРАГ УНИЧТОЖЕН!";
                 }
 
                 if (g_kills == 10)
                 {
-                    g_message =
-                        "ЦЕЛЬ МИССИИ: УДЕРЖИВАЙТЕ ПОЗИЦИЮ.";
+                    g_message = "ВРАГ УНИЧТОЖЕН!";
                 }
             }
         }
@@ -2835,13 +2800,8 @@ static void resetGame()
     g_hitMarker = 0.0f;
     g_firstMouse = true;
 
-    g_storyStage = 0;
-    g_storyObjective = 0;
-
-    g_storyTimer = 2.5f;
-
     g_message =
-        "МИССИЯ: ВЫЖИВИТЕ И УНИЧТОЖЬТЕ ПРОТИВНИКА";
+        "ИГРА НАЧАТА. УНИЧТОЖАЙТЕ ВРАГОВ И ИССЛЕДУЙТЕ МИР.";
 
     g_currentWeapon =
         WEAPON_PISTOL;
@@ -2913,15 +2873,15 @@ static void setJetpack(bool enabled)
 {
     if (enabled && g_jetpackFuel <= 0.5f)
     {
-        g_message = "ДЖЕТПАК: НЕТ ТОПЛИВА.";
+        g_message.clear();
         g_jetpackEnabled = false;
         return;
     }
     g_jetpackEnabled = enabled;
     if (enabled)
-        g_message = "ДЖЕТПАК ВКЛЮЧЁН - ПРОБЕЛ: ТЯГА.";
+        g_message.clear();
     else
-        g_message = "ДЖЕТПАК ВЫКЛЮЧЕН.";
+        g_message.clear();
 }
 
 static void updateJetpack(float dt)
@@ -2939,7 +2899,7 @@ static void updateJetpack(float dt)
             if (g_jetpackFuel <= 0.0f)
             {
                 g_jetpackEnabled = false;
-                g_message = "ДЖЕТПАК ПУСТ - СЯДЬТЕ ДЛЯ ЗАРЯДКИ.";
+                g_message.clear();
             }
         }
         else
@@ -2978,7 +2938,7 @@ static void updatePlayer(float dt)
         !std::isfinite(g_vy) || !std::isfinite(g_yaw) || !std::isfinite(g_pitch))
     {
         g_px=0.0f; g_pz=0.0f; g_py=terrainHeight(0.0f,0.0f); g_vy=0.0f; g_yaw=0.0f; g_pitch=0.0f; g_onGround=true;
-        g_message="ОШИБКА ПОЗИЦИИ ИСПРАВЛЕНА. ИГРА ПРОДОЛЖЕНА.";
+        g_message.clear();
     }
     if (dt > 0.05f) dt = 0.05f;
     if (g_deadTimer > 0.0f)
@@ -3355,7 +3315,7 @@ static void updateEnemyProjectiles(float dt)
                     p.active=false;
                     hitSub=true;
                     g_hitMarker=1.0f;
-                    g_message="ПОПАДАНИЕ ПО СУБМАРИНЕ!";
+                    g_message.clear();
                     break;
                 }
             }
@@ -3648,7 +3608,7 @@ static void updatePickups()
         if (o.type == OBJECT_ROCKET_AMMO)
         {
             g_weapons[WEAPON_ROCKET].reserve += 3;
-            g_message = "РАКЕТНЫЕ БОЕПРИПАСЫ +3";
+            g_message.clear();
             o.active = false;
         }
         else if (o.type == OBJECT_AMMO)
@@ -3661,8 +3621,7 @@ static void updatePickups()
                     30;
             }
 
-            g_message =
-                "БОЕПРИПАСЫ ПОДОБРАНЫ";
+            g_message.clear();
 
             o.active = false;
         }
@@ -3677,8 +3636,7 @@ static void updatePickups()
                         g_maxHealth
                     );
 
-                g_message =
-                    "АПТЕЧКА: +35 ЗДОРОВЬЯ";
+                g_message.clear();
 
                 o.active = false;
             }
@@ -3848,16 +3806,6 @@ static void updateGame(float dt)
 
     prevR = r;
 
-    // Expanded campaign story. Each beat provides a transmission and a concrete objective.
-    g_storyTimer -= dt;
-    if (g_storyTimer <= 0.0f && g_storyStage < STORY_BEAT_COUNT)
-    {
-        const StoryBeat& beat = g_storyBeats[g_storyStage];
-        g_message = std::string(beat.transmission) + "   |  ЦЕЛЬ: " + beat.objective;
-        g_storyObjective = g_storyStage;
-        g_storyStage++;
-        g_storyTimer = (g_storyStage >= STORY_BEAT_COUNT) ? 9999.0f : 20.0f;
-    }
 }
 
 // ============================================================
@@ -5613,14 +5561,23 @@ static GLuint g_impactAsciiBase = 0;
 static GLuint g_impactCyrBase = 0;
 static HFONT g_impactFont = nullptr;
 static bool g_impactFontReady = false;
+static GLuint g_loadingAsciiBase = 0;
+static GLuint g_loadingCyrBase = 0;
+static GLuint g_loadingGreekBase = 0;
+static GLuint g_loadingLatin1Base = 0;
+static HFONT g_loadingFont = nullptr;
+static bool g_loadingFontReady = false;
 
 static void initImpactFont()
 {
     HDC dc = wglGetCurrentDC();
     if (!dc) return;
 
+    // Bitmap display lists use pixel-sized glyphs; OpenGL model scaling does
+    // not reliably shrink glBitmap glyphs.  Use a genuinely small Impact font.
+    // 28 px is about 3.4x smaller than the previous 96 px glyphs.
     g_impactFont = CreateFontW(
-        -96, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        -28, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
         DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
         ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
         L"Impact");
@@ -5643,6 +5600,38 @@ static void initImpactFont()
         return;
     }
     g_impactFontReady = true;
+
+    // Separate italic Impact face for the startup splash.
+    g_loadingFont = CreateFontW(
+        -42, 0, 0, 0, FW_BOLD, TRUE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+        ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+        L"Impact");
+    if (g_loadingFont)
+    {
+        HFONT oldLoading = (HFONT)SelectObject(dc, g_loadingFont);
+        g_loadingAsciiBase = glGenLists(256);
+        g_loadingCyrBase = glGenLists(256);
+        g_loadingGreekBase = glGenLists(128);
+        g_loadingLatin1Base = glGenLists(96);
+        const BOOL loadAsciiOk = wglUseFontBitmapsW(dc, 0, 256, g_loadingAsciiBase);
+        const BOOL loadCyrOk = wglUseFontBitmapsW(dc, 0x0400, 256, g_loadingCyrBase);
+        const BOOL loadGreekOk = wglUseFontBitmapsW(dc, 0x0370, 128, g_loadingGreekBase);
+        const BOOL loadLatin1Ok = wglUseFontBitmapsW(dc, 0x00A0, 96, g_loadingLatin1Base);
+        SelectObject(dc, oldLoading);
+        if (loadAsciiOk && loadCyrOk && loadGreekOk && loadLatin1Ok)
+            g_loadingFontReady = true;
+        else
+        {
+            if (g_loadingAsciiBase) glDeleteLists(g_loadingAsciiBase, 256);
+            if (g_loadingCyrBase) glDeleteLists(g_loadingCyrBase, 256);
+            if (g_loadingGreekBase) glDeleteLists(g_loadingGreekBase, 128);
+            if (g_loadingLatin1Base) glDeleteLists(g_loadingLatin1Base, 96);
+            g_loadingAsciiBase = g_loadingCyrBase = 0;
+            DeleteObject(g_loadingFont);
+            g_loadingFont = nullptr;
+        }
+    }
 }
 
 static void destroyImpactFont()
@@ -5653,6 +5642,15 @@ static void destroyImpactFont()
     if (g_impactFont) DeleteObject(g_impactFont);
     g_impactFont = nullptr;
     g_impactFontReady = false;
+    if (g_loadingAsciiBase) glDeleteLists(g_loadingAsciiBase, 256);
+    if (g_loadingCyrBase) glDeleteLists(g_loadingCyrBase, 256);
+    g_loadingAsciiBase = g_loadingCyrBase = 0;
+    if (g_loadingGreekBase) glDeleteLists(g_loadingGreekBase, 128);
+    if (g_loadingLatin1Base) glDeleteLists(g_loadingLatin1Base, 96);
+    g_loadingGreekBase = g_loadingLatin1Base = 0;
+    if (g_loadingFont) DeleteObject(g_loadingFont);
+    g_loadingFont = nullptr;
+    g_loadingFontReady = false;
 }
 
 static std::wstring utf8ToWide(const std::string& text)
@@ -5694,10 +5692,12 @@ static void drawTextImpact(const std::string& text, float x, float y, float scal
     glDisable(GL_BLEND);
     glListBase(g_impactAsciiBase);
 
-    // Font display lists are generated at 96 px. Scale them to the requested HUD size.
+    // The glyphs are generated at 28 px, so their real pixel size is compact.
+    // Keep the legacy scale argument for source compatibility, but do not use
+    // model scaling to resize bitmap glyphs: glBitmap sizes are pixel based.
+    (void)scale;
     glPushMatrix();
     glTranslatef(x, y, 0.0f);
-    glScalef(scale / 6.0f, scale / 6.0f, 1.0f);
     glRasterPos2f(0.0f, 0.0f);
 
     size_t pos = 0;
@@ -5738,8 +5738,9 @@ static void drawText(const std::string& text, float x, float y, float scale, flo
         return;
     }
 #endif
-    // Non-Windows fallback: the original bitmap renderer is intentionally kept
-    // so the source remains portable. On Windows the Impact renderer above is used.
+    // Non-Windows fallback: keep the same compact UI scale as the Impact renderer.
+    const float uiScale = scale * 0.2857142857f;
+    const float uiSpacing = spacing * 0.2857142857f;
     glBegin(GL_QUADS);
     float pen=x;
     for(size_t i=0;i<text.size();){
@@ -5748,15 +5749,15 @@ static void drawText(const std::string& text, float x, float y, float scale, flo
         if(c<0x80){ cp=c; }
         else if((c&0xE0)==0xC0 && i+1<text.size()) { cp=c&0x1F; cp=(cp<<6)|((unsigned char)text[i+1]&0x3F); consumed=2; }
         else if((c&0xF0)==0xE0 && i+2<text.size()) { cp=c&0x0F; cp=(cp<<6)|((unsigned char)text[i+1]&0x3F); cp=(cp<<6)|((unsigned char)text[i+2]&0x3F); consumed=3; }
-        else { ++i; pen+=6.0f*scale; continue; }
+        else { ++i; pen+=6.0f*uiScale; continue; }
         i+=consumed;
-        if(cp==' '){ pen+=4.0f*scale; continue; }
+        if(cp==' '){ pen+=4.0f*uiScale; continue; }
         int idx=-1; const uint8_t* glyph=nullptr;
         if(cp<128){ idx=fontIndex((char)cp); if(idx>=0) glyph=g_font5x7[idx]; }
         else { int ci=cyrillicIndex(cp); if(ci>=0) glyph=g_cyrFont5x7[ci]; }
-        if(!glyph){ pen+=6*scale; continue; }
-        for(int row=0;row<7;++row){ const uint8_t bits=glyph[row]; for(int col=0;col<5;++col){ if(!(bits&(1u<<(4-col)))) continue; const float x0=pen+col*scale,y0=y+(6-row)*scale; glVertex2f(x0,y0);glVertex2f(x0+scale,y0);glVertex2f(x0+scale,y0+scale);glVertex2f(x0,y0+scale); }}
-        pen+=6*scale+spacing*scale;
+        if(!glyph){ pen+=6*uiScale; continue; }
+        for(int row=0;row<7;++row){ const uint8_t bits=glyph[row]; for(int col=0;col<5;++col){ if(!(bits&(1u<<(4-col)))) continue; const float x0=pen+col*uiScale,y0=y+(6-row)*uiScale; glVertex2f(x0,y0);glVertex2f(x0+uiScale,y0);glVertex2f(x0+uiScale,y0+uiScale);glVertex2f(x0,y0+uiScale); }}
+        pen+=6*uiScale+uiSpacing;
     }
     glEnd();
 }
@@ -6076,19 +6077,20 @@ static void drawHUD(
         cy + 14
     );
 
-    // Story/transmission panel. The message system is now visible in-game,
-    // so the campaign is not just background state.
-    const float panelW = std::min(1100.0f, (float)W - 50.0f);
-    const float panelX = W*0.5f - panelW*0.5f;
-    const float panelY = H - 118.0f;
-    glColor3f(0.015f,0.022f,0.035f);
-    rect(panelX,panelY,panelX+panelW,panelY+78.0f);
-    glColor3f(0.08f,0.42f,0.55f);
-    rect(panelX,panelY,panelX+5.0f,panelY+78.0f);
-    glColor3f(0.80f,0.92f,1.0f);
-    const auto lines = hudMessageLines();
-    for(size_t li=0; li<lines.size(); ++li)
-        drawText(lines[li],panelX+16.0f,panelY+14.0f+(float)(lines.size()-1-li)*20.0f,1.72f,0.18f);
+    // Compact status message. Only startup, enemy-kill and world-transition
+    // messages are written to g_message; campaign/story text is removed.
+    if (!g_message.empty())
+    {
+        const float panelW = std::min(760.0f, (float)W - 60.0f);
+        const float panelX = W*0.5f - panelW*0.5f;
+        const float panelY = H - 58.0f;
+        glColor4f(0.015f,0.022f,0.035f,0.72f);
+        rect(panelX,panelY,panelX+panelW,panelY+38.0f);
+        glColor3f(0.10f,0.42f,0.55f);
+        rect(panelX,panelY,panelX+4.0f,panelY+38.0f);
+        glColor3f(0.86f,0.94f,1.0f);
+        drawText(g_message,panelX+14.0f,panelY+10.0f,2.2f,0.12f);
+    }
 
     // health background
     glColor3f(
@@ -6231,10 +6233,6 @@ static void drawHUD(
     glColor3f(g_jetpackEnabled ? 0.95f : 0.55f,0.85f,0.95f);
     drawNumber(345,80,22,(int)std::round(g_jetpackFuel));
 
-    // Campaign stage indicator.
-    glColor3f(0.95f,0.78f,0.22f);
-    drawNumber(W-360,H-80,28,std::min(g_storyObjective+1,STORY_BEAT_COUNT));
-
     glColor3f(0.62f,0.70f,0.78f);
     drawText("F: ДЖЕТПАК    ПРОБЕЛ: ТЯГА", W*0.5f-125.0f, 8.0f, 1.5f, 0.25f);
 
@@ -6346,36 +6344,57 @@ static void setFullscreenMode(GLFWwindow* window, bool fullscreen)
     GLFWmonitor* monitor = getPrimaryMonitor();
     if (!monitor) return;
 
+    // Use BORDERLESS fullscreen instead of GLFW exclusive fullscreen.
+    // This changes only our window size/decoration and does not switch the
+    // monitor video mode, so other Windows applications keep their positions.
     if (fullscreen)
     {
+        int mx = 0, my = 0, mw = 1280, mh = 720;
+        glfwGetMonitorPos(monitor, &mx, &my);
         const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-        if (!mode) return;
+        if (mode) { mw = mode->width; mh = mode->height; }
 
-        // Keep the user's saved resolution when the monitor supports it.
-        int w = g_displaySettings.width;
-        int h = g_displaySettings.height;
-        int refresh = mode->refreshRate;
-
-        if (w > mode->width || h > mode->height)
-        {
-            w = mode->width;
-            h = mode->height;
-        }
-
-        glfwSetWindowMonitor(window, monitor, 0, 0, w, h, refresh);
-        g_displaySettings.width = w;
-        g_displaySettings.height = h;
+        glfwSetWindowAttrib(window, GLFW_DECORATED, GLFW_FALSE);
+        glfwSetWindowMonitor(window, nullptr, mx, my, mw, mh, 0);
         g_displaySettings.fullscreen = true;
     }
     else
     {
-        int w = std::max(800, g_displaySettings.width);
-        int h = std::max(600, g_displaySettings.height);
+        const int w = std::max(800, g_displaySettings.width);
+        const int h = std::max(600, g_displaySettings.height);
+        glfwSetWindowAttrib(window, GLFW_DECORATED, GLFW_TRUE);
         glfwSetWindowMonitor(window, nullptr, 80, 60, w, h, 0);
+        g_displaySettings.width = w;
+        g_displaySettings.height = h;
         g_displaySettings.fullscreen = false;
     }
 
     saveDisplaySettings();
+}
+
+#ifdef _WIN32
+static float impactTextWidth(const std::string& text)
+{
+    if (!g_impactFontReady || !g_impactFont) return (float)text.size() * 16.0f;
+    HDC dc = wglGetCurrentDC();
+    if (!dc) return (float)text.size() * 16.0f;
+    const std::wstring wide = utf8ToWide(text);
+    HFONT oldFont = (HFONT)SelectObject(dc, g_impactFont);
+    SIZE sz{0,0};
+    GetTextExtentPoint32W(dc, wide.c_str(), (int)wide.size(), &sz);
+    SelectObject(dc, oldFont);
+    return (float)sz.cx;
+}
+#endif
+
+static void drawCenteredMenuText(const std::string& text, float centerX, float y)
+{
+#ifdef _WIN32
+    const float width = impactTextWidth(text);
+#else
+    const float width = (float)text.size() * 16.0f;
+#endif
+    drawText(text, centerX - width * 0.5f, y, 1.0f, 0.0f);
 }
 
 static void drawStartMenu(int W, int H)
@@ -6390,57 +6409,69 @@ static void drawStartMenu(int W, int H)
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_FOG);
 
-    // Simple dark translucent-style panel (fixed pipeline, no texture required).
-    glColor3f(0.025f, 0.045f, 0.075f);
+    glColor3f(0.015f, 0.025f, 0.045f);
     glBegin(GL_QUADS);
     glVertex2f(0,0); glVertex2f((float)W,0); glVertex2f((float)W,(float)H); glVertex2f(0,(float)H);
     glEnd();
 
-    const float panelW = std::min(620.0f, W * 0.72f);
-    const float panelH = 420.0f;
+    const float panelW = std::min(720.0f, W * 0.78f);
+    const float panelH = std::min(560.0f, H * 0.78f);
     const float left = W * 0.5f - panelW * 0.5f;
     const float bottom = H * 0.5f - panelH * 0.5f;
 
-    glColor3f(0.06f, 0.10f, 0.15f);
+    glColor3f(0.045f, 0.065f, 0.10f);
     glBegin(GL_QUADS);
     glVertex2f(left,bottom); glVertex2f(left+panelW,bottom);
     glVertex2f(left+panelW,bottom+panelH); glVertex2f(left,bottom+panelH);
     glEnd();
 
-    glColor3f(0.20f,0.55f,0.82f);
+    glColor3f(0.10f,0.45f,0.75f);
     glBegin(GL_LINE_LOOP);
     glVertex2f(left,bottom); glVertex2f(left+panelW,bottom);
     glVertex2f(left+panelW,bottom+panelH); glVertex2f(left,bottom+panelH);
     glEnd();
 
-    glColor3f(0.92f,0.96f,1.0f);
-    drawText("ФРОНТИР: ШТУРМ", left+105.0f, bottom+315.0f, 6.0f, 0.35f);
+    // Title is centered and separated from all controls.
+    const float titleY = bottom + panelH - 92.0f;
+    glColor3f(0.12f, 0.34f, 0.58f);
+    glBegin(GL_QUADS);
+    glVertex2f(left+24.0f, titleY-18.0f);
+    glVertex2f(left+panelW-24.0f, titleY-18.0f);
+    glVertex2f(left+panelW-24.0f, titleY+44.0f);
+    glVertex2f(left+24.0f, titleY+44.0f);
+    glEnd();
+    glColor3f(0.98f,0.98f,1.0f);
+    drawCenteredMenuText("ШУТЕР", W * 0.5f, titleY);
 
+    const float buttonW = panelW - 150.0f;
+    const float buttonX = left + 75.0f;
+    const float buttonH = 56.0f;
+    const float firstY = bottom + panelH - 205.0f;
+    const float gap = 86.0f;
     const char* items[3] = { "ИГРАТЬ", "ПОЛНЫЙ ЭКРАН", "ВЫХОД" };
     for (int i=0;i<3;++i)
     {
-        const float y = bottom + 215.0f - i*78.0f;
+        const float y = firstY - i*gap;
         if (i == g_menuSelection)
-        {
-            glColor3f(0.12f,0.35f,0.55f);
-            glBegin(GL_QUADS);
-            glVertex2f(left+90,y-12); glVertex2f(left+panelW-90,y-12);
-            glVertex2f(left+panelW-90,y+38); glVertex2f(left+90,y+38);
-            glEnd();
-            glColor3f(0.95f,0.98f,1.0f);
-        }
+            glColor3f(0.10f,0.38f,0.62f);
         else
-        {
-            glColor3f(0.65f,0.72f,0.80f);
-        }
-        drawText(items[i], left+145.0f, y, 4.0f, 0.25f);
+            glColor3f(0.075f,0.11f,0.16f);
+        glBegin(GL_QUADS);
+        glVertex2f(buttonX,y); glVertex2f(buttonX+buttonW,y);
+        glVertex2f(buttonX+buttonW,y+buttonH); glVertex2f(buttonX,y+buttonH);
+        glEnd();
+
+        glColor3f(i == g_menuSelection ? 0.98f : 0.72f,
+                  i == g_menuSelection ? 0.99f : 0.78f,
+                  i == g_menuSelection ? 1.00f : 0.86f);
+        drawCenteredMenuText(items[i], W * 0.5f, y + 16.0f);
     }
 
-    glColor3f(0.55f,0.62f,0.70f);
-    drawText("СТРЕЛКИ: ВЫБОР", left+145.0f, bottom+42.0f, 2.1f, 0.15f);
-    drawText("ВВОД: ПОДТВЕРДИТЬ", left+145.0f, bottom+17.0f, 2.1f, 0.15f);
-    drawText(g_displaySettings.fullscreen ? "ПОЛНЫЙ ЭКРАН: ВКЛ" : "ПОЛНЫЙ ЭКРАН: ВЫКЛ",
-             left+145.0f, bottom+70.0f, 2.1f, 0.15f);
+    // Status/help is placed in a dedicated footer, far below the buttons.
+    glColor3f(0.45f,0.55f,0.66f);
+    const std::string status = g_displaySettings.fullscreen ? "ПОЛНЫЙ ЭКРАН: ВКЛ" : "ПОЛНЫЙ ЭКРАН: ВЫКЛ";
+    drawCenteredMenuText(status, W * 0.5f, bottom + 56.0f);
+    drawCenteredMenuText("СТРЕЛКИ / МЫШЬ — ВЫБОР    ВВОД / ЛКМ — ПОДТВЕРДИТЬ", W * 0.5f, bottom + 25.0f);
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_FOG);
@@ -6448,6 +6479,29 @@ static void drawStartMenu(int W, int H)
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
     glMatrixMode(GL_MODELVIEW);
+}
+
+static void activateMenuSelection(GLFWwindow* window)
+{
+    if (g_menuSelection == 0)
+    {
+        // Enter gameplay exactly once. Keeping this path identical for keyboard
+        // and mouse prevents the menu from getting stuck after a click.
+        g_inStartMenu = false;
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        g_firstMouse = true;
+        if (glfwRawMouseMotionSupported())
+            glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+        resetGame();
+    }
+    else if (g_menuSelection == 1)
+    {
+        setFullscreenMode(window, !g_displaySettings.fullscreen);
+    }
+    else
+    {
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
+    }
 }
 
 static void updateStartMenu(GLFWwindow* window)
@@ -6462,25 +6516,56 @@ static void updateStartMenu(GLFWwindow* window)
     if (down && !g_prevDown) g_menuSelection = (g_menuSelection + 1) % 3;
 
     if (enter && !g_prevEnter)
+        activateMenuSelection(window);
+
+    // Mouse support: hover selects a button and a left click activates it.
+    // Coordinates are converted from window coordinates to framebuffer pixels,
+    // so this also works with Windows display scaling.
+    double cursorX = 0.0, cursorY = 0.0;
+    glfwGetCursorPos(window, &cursorX, &cursorY);
+
+    int fbW = 1, fbH = 1, winW = 1, winH = 1;
+    glfwGetFramebufferSize(window, &fbW, &fbH);
+    glfwGetWindowSize(window, &winW, &winH);
+    if (winW > 0 && winH > 0)
     {
-        if (g_menuSelection == 0)
+        cursorX *= (double)fbW / (double)winW;
+        cursorY *= (double)fbH / (double)winH;
+    }
+
+    // drawStartMenu uses a bottom-left origin, while GLFW mouse coordinates
+    // use a top-left origin.
+    const float mx = (float)cursorX;
+    const float my = (float)fbH - (float)cursorY;
+
+    const float panelW = std::min(720.0f, fbW * 0.78f);
+    const float panelH = std::min(560.0f, fbH * 0.78f);
+    const float left = fbW * 0.5f - panelW * 0.5f;
+    const float bottom = fbH * 0.5f - panelH * 0.5f;
+
+    int hovered = -1;
+    for (int i = 0; i < 3; ++i)
+    {
+        const float y = bottom + panelH - 205.0f - i * 86.0f;
+        const float bx0 = left + 75.0f;
+        const float bx1 = left + panelW - 75.0f;
+        const float by0 = y;
+        const float by1 = y + 56.0f;
+        if (mx >= bx0 && mx <= bx1 && my >= by0 && my <= by1)
         {
-            g_inStartMenu = false;
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-            g_firstMouse = true;
-            if (glfwRawMouseMotionSupported())
-                glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
-            resetGame();
-        }
-        else if (g_menuSelection == 1)
-        {
-            setFullscreenMode(window, !g_displaySettings.fullscreen);
-        }
-        else
-        {
-            glfwSetWindowShouldClose(window, GLFW_TRUE);
+            hovered = i;
+            break;
         }
     }
+
+    if (hovered >= 0)
+        g_menuSelection = hovered;
+
+    static bool prevMouseLeft = false;
+    const bool mouseLeft = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+    if (mouseLeft && !prevMouseLeft && hovered >= 0)
+        activateMenuSelection(window);
+    prevMouseLeft = mouseLeft;
 
     if (f11 && !g_prevF11)
         setFullscreenMode(window, !g_displaySettings.fullscreen);
@@ -6492,6 +6577,92 @@ static void updateStartMenu(GLFWwindow* window)
     g_prevDown = down;
     g_prevEnter = enter;
     g_prevF11 = f11;
+}
+
+// ============================================================
+// STARTUP SPLASH
+// ============================================================
+
+#ifdef _WIN32
+static void drawLoadingTextImpact(const std::string& text, float x, float y)
+{
+    if (!g_loadingFontReady) return;
+    const std::wstring wide = utf8ToWide(text);
+    glPushAttrib(GL_LIST_BIT | GL_CURRENT_BIT | GL_ENABLE_BIT);
+    glDisable(GL_TEXTURE_2D);
+    glDisable(GL_LIGHTING);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
+    glColor3f(0.96f, 0.97f, 1.0f);
+    glRasterPos2f(x, y);
+    size_t pos = 0;
+    while (pos < wide.size())
+    {
+        const uint16_t cp = (uint16_t)wide[pos];
+        enum class FontSet { Ascii, Latin1, Greek, Cyrillic } set = FontSet::Ascii;
+        uint16_t base = 0;
+        if (cp >= 0x0400 && cp <= 0x04FF) { set = FontSet::Cyrillic; base = 0x0400; }
+        else if (cp >= 0x0370 && cp <= 0x03EF) { set = FontSet::Greek; base = 0x0370; }
+        else if (cp >= 0x00A0 && cp <= 0x00FF) { set = FontSet::Latin1; base = 0x00A0; }
+        else { set = FontSet::Ascii; base = 0; }
+
+        size_t start = pos;
+        while (pos < wide.size())
+        {
+            const uint16_t q = (uint16_t)wide[pos];
+            const bool same =
+                (set == FontSet::Cyrillic && q >= 0x0400 && q <= 0x04FF) ||
+                (set == FontSet::Greek && q >= 0x0370 && q <= 0x03EF) ||
+                (set == FontSet::Latin1 && q >= 0x00A0 && q <= 0x00FF) ||
+                (set == FontSet::Ascii && !(q >= 0x0370 && q <= 0x03EF) && !(q >= 0x0400 && q <= 0x04FF) && !(q >= 0x00A0 && q <= 0x00FF));
+            if (!same) break;
+            ++pos;
+        }
+        switch (set)
+        {
+            case FontSet::Cyrillic: glListBase(g_loadingCyrBase - base); break;
+            case FontSet::Greek: glListBase(g_loadingGreekBase - base); break;
+            case FontSet::Latin1: glListBase(g_loadingLatin1Base - base); break;
+            default: glListBase(g_loadingAsciiBase); break;
+        }
+        glCallLists((GLsizei)(pos - start), GL_UNSIGNED_SHORT, wide.data() + start);
+    }
+    glPopAttrib();
+}
+#endif
+
+static void drawLoadingScreen(int W, int H)
+{
+    glViewport(0, 0, W, H);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_FOG);
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glOrtho(0, W, 0, H, -1, 1);
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+    glClearColor(0.008f, 0.012f, 0.022f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glColor3f(0.96f, 0.97f, 1.0f);
+#ifdef _WIN32
+    if (g_loadingFontReady)
+    {
+        drawLoadingTextImpact("π²х Studios", W * 0.5f - 118.0f, H * 0.5f + 8.0f);
+    }
+    else
+#endif
+    {
+        drawText("pi2x Studios", W * 0.5f - 70.0f, H * 0.5f, 2.0f, 0.1f);
+    }
+    glColor3f(0.35f, 0.45f, 0.58f);
+    drawText("ЗАГРУЗКА...", W * 0.5f - 42.0f, H * 0.5f - 48.0f, 1.2f, 0.1f);
+    glPopMatrix();
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
+    glEnable(GL_DEPTH_TEST);
 }
 
 // ============================================================
@@ -6516,17 +6687,33 @@ int main()
 
     // Load the saved resolution. First launch defaults to fullscreen at 1280x720.
     loadDisplaySettings();
-    GLFWmonitor* monitor = g_displaySettings.fullscreen ? getPrimaryMonitor() : nullptr;
 
-    if (g_displaySettings.fullscreen && !monitor)
-        g_displaySettings.fullscreen = false;
+    // Fullscreen is implemented as borderless desktop-sized window, not an
+    // exclusive monitor mode switch. This prevents other Windows windows from
+    // being minimized/rearranged when the game starts or changes mode.
+    glfwWindowHint(GLFW_DECORATED, g_displaySettings.fullscreen ? GLFW_FALSE : GLFW_TRUE);
+    int createW = g_displaySettings.width;
+    int createH = g_displaySettings.height;
+    if (g_displaySettings.fullscreen)
+    {
+        GLFWmonitor* primary = getPrimaryMonitor();
+        int mx=0,my=0,mw=1280,mh=720;
+        if (primary)
+        {
+            glfwGetMonitorPos(primary, &mx, &my);
+            const GLFWvidmode* mode = glfwGetVideoMode(primary);
+            if (mode) { mw = mode->width; mh = mode->height; }
+        }
+        createW = mw;
+        createH = mh;
+    }
 
     g_window =
         glfwCreateWindow(
-            g_displaySettings.width,
-            g_displaySettings.height,
-            "Фронтир: Штурм",
-            monitor,
+            createW,
+            createH,
+            "ШУТЕР",
+            nullptr,
             nullptr
         );
 
@@ -6542,6 +6729,21 @@ int main()
         return -1;
     }
 
+    if (g_displaySettings.fullscreen)
+    {
+        GLFWmonitor* primary = getPrimaryMonitor();
+        int mx=0,my=0,mw=1280,mh=720;
+        if (primary)
+        {
+            glfwGetMonitorPos(primary, &mx, &my);
+            const GLFWvidmode* mode = glfwGetVideoMode(primary);
+            if (mode) { mw = mode->width; mh = mode->height; }
+        }
+        glfwSetWindowPos(g_window, mx, my);
+        g_displaySettings.width = mw;
+        g_displaySettings.height = mh;
+    }
+
     glfwMakeContextCurrent(
         g_window
     );
@@ -6550,6 +6752,27 @@ int main()
     initImpactFont();
 #endif
 
+    // The splash is deliberately exactly 3.0 seconds long (within the normal
+    // timer/frame granularity). Disable VSync only for this screen so a buffer
+    // swap cannot add an extra refresh interval to the requested duration.
+    glfwSwapInterval(0);
+    {
+        const double splashStart = glfwGetTime();
+        const double splashEnd = splashStart + 3.0;
+        while (!glfwWindowShouldClose(g_window))
+        {
+            const double now = glfwGetTime();
+            if (now >= splashEnd) break;
+            int splashW = 1, splashH = 1;
+            glfwGetFramebufferSize(g_window, &splashW, &splashH);
+            drawLoadingScreen(splashW, splashH);
+            glfwSwapBuffers(g_window);
+            glfwPollEvents();
+            const double remaining = splashEnd - glfwGetTime();
+            if (remaining > 0.002)
+                Sleep((DWORD)std::min(remaining * 1000.0, 2.0));
+        }
+    }
     glfwSwapInterval(1);
 
     // Start in the menu with a normal cursor. Gameplay enables raw mouse input.

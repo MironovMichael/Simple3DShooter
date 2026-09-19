@@ -1,0 +1,7 @@
+V33 UI / START MENU FIX
+
+- Impact text is now compact: the Windows renderer uses the same 0.2857 scale factor as the fallback renderer.
+- The start menu supports mouse hover and left-click activation.
+- Mouse coordinates are converted from window to framebuffer coordinates, including Windows display scaling.
+- Keyboard arrows + Enter remain supported.
+- Starting the game through mouse and keyboard uses one shared activation function, avoiding divergent menu-start paths.
