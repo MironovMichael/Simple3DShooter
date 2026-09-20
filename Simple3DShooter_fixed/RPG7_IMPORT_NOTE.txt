@@ -1,0 +1,11 @@
+RPG-7 model is extracted and installed as a native game asset.
+Files:
+  assets/weapons/RPG7/RPG-7.obj
+  assets/weapons/RPG7/RPG-7.mtl
+  assets/weapons/RPG7/RPG-7_C.tga
+  assets/weapons/RPG7/RPG-7_S.tga
+  assets/weapons/RPG7/RPG-7 Rocket_C.tga
+  assets/weapons/RPG7/RPG-7 Rocket_S.tga
+The launcher uses a dedicated scale (0.0036) and Y rotation (90 degrees)
+so the original large-unit OBJ is correctly sized and aligned in the FPS view.
+RPG material names are recognized by the fixed-pipeline OBJ loader.

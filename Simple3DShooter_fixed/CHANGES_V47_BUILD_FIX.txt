@@ -1,0 +1,4 @@
+V47 build fix
+- Added the missing Win32 moduleDirectory() helper used by startGameMusic().
+- Resolves: 'moduleDirectory' was not declared in this scope.
+- No gameplay/assets changes beyond the compile fix.

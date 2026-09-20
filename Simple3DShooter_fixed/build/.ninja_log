@@ -1,10 +1,10 @@
 # ninja log v7
-35	356	8115646844764979	CMakeFiles/Simple3DShooter.dir/src/Object.cpp.obj	421daa83660347fb
-17	376	8115646844574600	CMakeFiles/Simple3DShooter.dir/src/Item.cpp.obj	8911ce5120c3dc41
-40	522	8115646844814819	CMakeFiles/Simple3DShooter.dir/src/Player.cpp.obj	17af7262cdb061e7
-28	674	8115646844694875	CMakeFiles/Simple3DShooter.dir/src/ItemManager.cpp.obj	8e1f910e6a12a9e
-59	710	8115646845000030	CMakeFiles/Simple3DShooter.dir/src/World.cpp.obj	cc6d9140dceb2dba
-50	764	8115646844920029	CMakeFiles/Simple3DShooter.dir/src/Weapon.cpp.obj	4fe8253e58cbe66f
-44	941	8115646844860076	CMakeFiles/Simple3DShooter.dir/src/Story.cpp.obj	bb6843a28614768d
-6	5956	8115646844464679	CMakeFiles/Simple3DShooter.dir/src/main.cpp.obj	50c48d2a35b52840
-5958	6235	8115646903997162	Simple3DShooter.exe	2dccfcc31fd41855
+57	360	8115746641346885	CMakeFiles/Simple3DShooter.dir/src/Object.cpp.obj	421daa83660347fb
+44	369	8115746641211734	CMakeFiles/Simple3DShooter.dir/src/Item.cpp.obj	8911ce5120c3dc41
+67	506	8115746641446883	CMakeFiles/Simple3DShooter.dir/src/Player.cpp.obj	17af7262cdb061e7
+47	656	8115746641236882	CMakeFiles/Simple3DShooter.dir/src/ItemManager.cpp.obj	8e1f910e6a12a9e
+97	697	8115746641736851	CMakeFiles/Simple3DShooter.dir/src/World.cpp.obj	cc6d9140dceb2dba
+87	709	8115746641636896	CMakeFiles/Simple3DShooter.dir/src/Weapon.cpp.obj	4fe8253e58cbe66f
+78	911	8115746641556878	CMakeFiles/Simple3DShooter.dir/src/Story.cpp.obj	bb6843a28614768d
+35	4747	8115746641125868	CMakeFiles/Simple3DShooter.dir/src/main.cpp.obj	50c48d2a35b52840
+4748	4928	8115746688251133	Simple3DShooter.exe	2dccfcc31fd41855

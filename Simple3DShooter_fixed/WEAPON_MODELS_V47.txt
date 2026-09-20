@@ -1,0 +1,5 @@
+V47 weapon models:
+- Revolver: assets/weapons/Revolver/rovelver1.0.0.obj
+- AK-74: assets/weapons/AK-74.obj
+- Shotgun: assets/weapons/doppietta.obj
+- RPG-7: assets/weapons/RPG7/RPG-7.obj

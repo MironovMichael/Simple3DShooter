@@ -1,0 +1,15 @@
+V40 - collision / tunnel / jetpack fixes
+
+- Reworked player-vs-obstacle collision to use vertical overlap instead of a raw XZ-only blocker.
+- Roofs and other solid obstacles no longer teleport/freeze the player when jumping onto them.
+- Horizontal movement is swept in small substeps to prevent tunneling through collision volumes at jetpack/sprint speed.
+- House body and roof remain solid; the house interior is inaccessible.
+- Winter snowmen now have physical collision volumes.
+- Other-world landmark collisions now respect player height, so flying above an object does not block movement.
+- Tunnel entry/exit is no longer automatic. Press E near a gate to enter or leave.
+- Added an on-screen E prompt near tunnel gates.
+- Ocean jetpack floor safety prevents falling below the water/island collision plane.
+- Ocean projectile ceiling raised for airborne rocket flight.
+- Player rocket has a longer launch grace and nearby-player distance immunity, preventing instant self-collision/explosion during jetpack flight.
+- Reset now switches to the main world before rebuilding main-world terrain/house collision objects.
+- Escape during gameplay returns to the start menu; the existing V39 behavior is preserved.

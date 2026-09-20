@@ -69,52 +69,150 @@ static constexpr float WORLD_SCALE = 3.0f;
 static const float ARENA = 630.0f;
 
 static void createCityBiome();
+static void createWtcBuildings();
 
 static GLuint g_earthSkyTexture = 0;
 static GLuint g_grassTexture = 0;
 
 #ifdef _WIN32
-static bool g_musicPlaying = false;
-
 static std::wstring moduleDirectory()
 {
-    wchar_t buf[MAX_PATH]{};
-    const DWORD n=GetModuleFileNameW(nullptr,buf,MAX_PATH);
-    if(n==0 || n>=MAX_PATH) return L".";
-    std::wstring p(buf,n);
-    const size_t slash=p.find_last_of(L"\\/");
-    return slash==std::wstring::npos ? L"." : p.substr(0,slash);
+    wchar_t path[MAX_PATH * 4]{};
+    DWORD n = GetModuleFileNameW(nullptr, path, (DWORD)(sizeof(path) / sizeof(path[0])));
+    if (n == 0) return L".";
+    std::wstring full(path, path + n);
+    const std::wstring::size_type slash = full.find_last_of(L"\\/");
+    if (slash == std::wstring::npos) return L".";
+    return full.substr(0, slash);
 }
 
-static bool startGameMusic()
+static bool g_musicPlaying = false;
+static int g_musicVolume = 70;
+static HWAVEOUT g_musicWaveOut = nullptr;
+static WAVEHDR g_musicHeader{};
+static std::vector<unsigned char> g_musicPCM;
+static WAVEFORMATEX g_musicFormat{};
+
+static void setWaveOutVolume()
 {
-    const std::wstring exeDir=moduleDirectory();
-    const std::wstring paths[]={
-        L"assets\\music\\BeepBox-Song.wav",
-        L"..\\assets\\music\\BeepBox-Song.wav",
-        exeDir+L"\\assets\\music\\BeepBox-Song.wav",
-        exeDir+L"\\..\\assets\\music\\BeepBox-Song.wav"
-    };
-    for(const auto& path:paths)
+    if (!g_musicWaveOut) return;
+    const int clampedVolume = std::max(0,std::min(100,g_musicVolume));
+    const DWORD v = (DWORD)std::lround((float)clampedVolume * 655.35f);
+    const DWORD stereo = v | (v << 16);
+    waveOutSetVolume(g_musicWaveOut, stereo);
+}
+
+static bool loadPCMWave(const std::wstring& path)
+{
+    FILE* f = _wfopen(path.c_str(), L"rb");
+    if (!f) return false;
+    auto readU32=[&](uint32_t& v)->bool{return std::fread(&v,4,1,f)==1;};
+    auto readU16=[&](uint16_t& v)->bool{return std::fread(&v,2,1,f)==1;};
+    char riff[4]{}, wave[4]{};
+    uint32_t riffSize=0;
+    if (std::fread(riff,1,4,f)!=4 || !readU32(riffSize) || std::fread(wave,1,4,f)!=4 ||
+        std::memcmp(riff,"RIFF",4)!=0 || std::memcmp(wave,"WAVE",4)!=0)
+    { std::fclose(f); return false; }
+    (void)riffSize;
+    bool haveFmt=false, haveData=false;
+    std::vector<unsigned char> data;
+    WAVEFORMATEX fmt{};
+    while (!std::feof(f))
     {
-        const DWORD attr=GetFileAttributesW(path.c_str());
-        if(attr==INVALID_FILE_ATTRIBUTES || (attr&FILE_ATTRIBUTE_DIRECTORY)) continue;
-        if(PlaySoundW(path.c_str(),nullptr,SND_FILENAME|SND_ASYNC|SND_LOOP|SND_NODEFAULT))
+        char id[4]{}; uint32_t size=0;
+        if (std::fread(id,1,4,f)!=4 || !readU32(size)) break;
+        if (std::memcmp(id,"fmt ",4)==0)
         {
-            g_musicPlaying=true;
-            return true;
+            uint16_t format=0, channels=0, bits=0;
+            uint32_t sampleRate=0, byteRate=0; uint16_t blockAlign=0;
+            if (!readU16(format) || !readU16(channels) || !readU32(sampleRate) || !readU32(byteRate) ||
+                !readU16(blockAlign) || !readU16(bits)) { std::fclose(f); return false; }
+            fmt.wFormatTag=format; fmt.nChannels=channels; fmt.nSamplesPerSec=sampleRate;
+            fmt.nAvgBytesPerSec=byteRate; fmt.nBlockAlign=blockAlign; fmt.wBitsPerSample=bits;
+            if (size>16) std::fseek(f,(long)(size-16),SEEK_CUR);
+            haveFmt=true;
         }
+        else if (std::memcmp(id,"data",4)==0)
+        {
+            data.resize(size);
+            if (size && std::fread(data.data(),1,size,f)!=size) { std::fclose(f); return false; }
+            haveData=true;
+        }
+        else
+        {
+            std::fseek(f,(long)size,SEEK_CUR);
+        }
+        if (size & 1u) std::fseek(f,1,SEEK_CUR);
     }
-    return false;
+    std::fclose(f);
+    if (!haveFmt || !haveData || data.empty() || fmt.wFormatTag!=WAVE_FORMAT_PCM ||
+        (fmt.wBitsPerSample!=8 && fmt.wBitsPerSample!=16) || fmt.nChannels<1 || fmt.nChannels>2)
+        return false;
+    g_musicFormat=fmt;
+    g_musicPCM=std::move(data);
+    return true;
+}
+
+static void CALLBACK musicWaveCallback(HWAVEOUT hwo, UINT msg, DWORD_PTR, DWORD_PTR, DWORD_PTR)
+{
+    if (msg != WOM_DONE || hwo != g_musicWaveOut || !g_musicPlaying) return;
+    g_musicHeader.dwFlags &= ~WHDR_DONE;
+    g_musicHeader.dwBytesRecorded = 0;
+    waveOutWrite(g_musicWaveOut,&g_musicHeader,sizeof(g_musicHeader));
 }
 
 static void stopGameMusic()
 {
-    if(g_musicPlaying)
+    g_musicPlaying=false;
+    if (g_musicWaveOut)
     {
-        PlaySoundW(nullptr,nullptr,0);
-        g_musicPlaying=false;
+        waveOutReset(g_musicWaveOut);
+        if (g_musicHeader.dwFlags & WHDR_PREPARED)
+            waveOutUnprepareHeader(g_musicWaveOut,&g_musicHeader,sizeof(g_musicHeader));
+        waveOutClose(g_musicWaveOut);
+        g_musicWaveOut=nullptr;
     }
+    std::memset(&g_musicHeader,0,sizeof(g_musicHeader));
+    g_musicPCM.clear();
+}
+
+static void applyMusicVolume()
+{
+    g_musicVolume=std::max(0,std::min(100,g_musicVolume));
+    setWaveOutVolume();
+}
+
+static bool startGameMusic()
+{
+    stopGameMusic();
+    const std::wstring exeDir=moduleDirectory();
+    const std::vector<std::wstring> paths={
+        L"assets\\music\\BeepBox-Song.wav",
+        L"..\\assets\\music\\BeepBox-Song.wav",
+        exeDir+L"\\assets\\music\\BeepBox-Song.wav",
+        exeDir+L"\\..\\assets\\music\\BeepBox-Song.wav",
+        exeDir+L"\\..\\..\\assets\\music\\BeepBox-Song.wav"
+    };
+    for (const auto& p:paths)
+    {
+        wchar_t fullBuf[MAX_PATH*2]{};
+        std::wstring full=p;
+        if (GetFullPathNameW(p.c_str(),(DWORD)(sizeof(fullBuf)/sizeof(fullBuf[0])),fullBuf,nullptr)>0) full=fullBuf;
+        if (!loadPCMWave(full)) continue;
+        MMRESULT r=waveOutOpen(&g_musicWaveOut,WAVE_MAPPER,&g_musicFormat,(DWORD_PTR)&musicWaveCallback,0,CALLBACK_FUNCTION);
+        if (r!=MMSYSERR_NOERROR) { g_musicWaveOut=nullptr; g_musicPCM.clear(); continue; }
+        std::memset(&g_musicHeader,0,sizeof(g_musicHeader));
+        g_musicHeader.lpData=(LPSTR)g_musicPCM.data();
+        g_musicHeader.dwBufferLength=(DWORD)g_musicPCM.size();
+        if (waveOutPrepareHeader(g_musicWaveOut,&g_musicHeader,sizeof(g_musicHeader))!=MMSYSERR_NOERROR)
+        { stopGameMusic(); continue; }
+        g_musicPlaying=true;
+        applyMusicVolume();
+        if (waveOutWrite(g_musicWaveOut,&g_musicHeader,sizeof(g_musicHeader))!=MMSYSERR_NOERROR)
+        { stopGameMusic(); continue; }
+        return true;
+    }
+    return false;
 }
 #endif
 
@@ -172,7 +270,10 @@ static bool loadHouseModelOBJ(const char* path)
                 size_t a=q.find('/'), b=a==std::string::npos?std::string::npos:q.find('/',a+1);
                 int vi=std::atoi((a==std::string::npos?q:q.substr(0,a)).c_str());
                 int ti=(a==std::string::npos?0:std::atoi(q.substr(a+1,b==std::string::npos?std::string::npos:b-a-1).c_str()));
-                if(vi<0) vi=(int)pos.size()+vi+1; if(ti<0) ti=(int)uv.size()+ti+1;
+                if (vi < 0)
+                    vi = (int)pos.size() + vi + 1;
+                if (ti < 0)
+                    ti = (int)uv.size() + ti + 1;
                 if(vi<=0 || vi>(int)pos.size()) continue;
                 auto p=pos[(size_t)vi-1]; float u=0,v=0; if(ti>0&&ti<=(int)uv.size()){u=uv[(size_t)ti-1][0];v=uv[(size_t)ti-1][1];}
                 g_houseModelTriangles.push_back({p[0],p[1],p[2],u,v,mat});
@@ -304,7 +405,18 @@ struct OceanSubmarine
     float hp;
     bool active;
 };
+struct SubmarineDeathEffect
+{
+    float x, y, z;
+    float age;
+    float life;
+    unsigned int seed;
+};
 static std::vector<OceanSubmarine> g_oceanSubmarines;
+static std::vector<SubmarineDeathEffect> g_submarineDeathEffects;
+static bool g_oceanVictoryShown = false;
+struct TankDeathEffect { float x,y,z,age,life; unsigned int seed; };
+static std::vector<TankDeathEffect> g_tankDeathEffects;
 static void createOceanSubmarines();
 static void updateOceanSubmarines(float dt);
 static void drawOceanSubmarines();
@@ -443,19 +555,15 @@ static void drawOtherWorldObject(const OtherWorldObject& o)
     glPopMatrix();
 }
 
-static bool otherWorldObjectBlocked(float x, float z, float radius)
-{
-    for (const auto& o : g_otherWorldObjects)
-    {
-        if (o.world != g_world) continue;
-        if (distance2D(x,z,o.x,o.z) < radius + o.radius)
-            return true;
-    }
-    return false;
-}
+static constexpr float PLAYER_RADIUS = 0.45f;
+static constexpr float PLAYER_HEIGHT = 1.75f;
+static constexpr float EYE_HEIGHT = 1.60f;
+
+
 
 static void createWorldPortals();
 static void updateWorldPortals();
+static bool tryUseTunnelGate();
 // ============================================================
 // MULTIVERSE
 // ============================================================
@@ -468,10 +576,6 @@ static constexpr float CITY_CENTER_X = 260.0f;
 static constexpr float CITY_CENTER_Z = -165.0f;
 static constexpr float CITY_RADIUS = 145.0f;
 static constexpr float CITY_ROAD_HALF = 3.8f;
-
-static const float PLAYER_RADIUS = 0.45f;
-static const float PLAYER_HEIGHT = 1.75f;
-static const float EYE_HEIGHT = 1.60f;
 
 static const float GRAVITY = 18.0f;
 static const float JUMP_SPEED = 10.5f;
@@ -503,6 +607,41 @@ static constexpr float JETPACK_THRUST = 31.0f;
 static constexpr float JETPACK_MAX_UP_SPEED = 14.0f;
 static constexpr float JETPACK_AIR_CONTROL = 8.5f;
 static constexpr float PLAYER_STEP_HEIGHT = 1.25f;
+
+static bool otherWorldObjectBlocked(float x, float z, float radius)
+{
+    // Use both horizontal and vertical overlap.  The old XZ-only test made
+    // landmarks (especially snowmen) block a flying player even when the
+    // player was several metres above them.
+    const float playerBottom = g_py;
+    const float playerTop = g_py + PLAYER_HEIGHT;
+    for (const auto& o : g_otherWorldObjects)
+    {
+        if (o.world != g_world) continue;
+
+        float h = 2.0f;
+        switch (o.type)
+        {
+            case WINTER_OBJECT_SNOWMAN: h = 7.9f; break;
+            case WINTER_OBJECT_PINE: h = 12.0f; break;
+            case WINTER_OBJECT_RADAR: h = 7.0f; break;
+            case WINTER_OBJECT_ICE_CRYSTAL: h = 4.5f; break;
+            case OCEAN_OBJECT_BEACON: h = 4.5f; break;
+            case OCEAN_OBJECT_WRECK: h = 3.0f; break;
+            case OCEAN_OBJECT_ICEBERG: h = 8.0f; break;
+            default: break;
+        }
+        h *= o.scale;
+        const float base = terrainHeight(o.x, o.z);
+        const float top = base + h;
+        if (playerTop <= base + 0.05f || playerBottom >= top - 0.05f)
+            continue;
+
+        if (distance2D(x,z,o.x,o.z) < radius + o.radius)
+            return true;
+    }
+    return false;
+}
 static constexpr float PLAYER_JUMPABLE_HEIGHT = 2.60f;
 
 static float g_yaw = 0.0f;
@@ -536,6 +675,15 @@ static constexpr float ENEMY_RENDER_DISTANCE = 200.0f;
 
 static std::string g_message =
     "ИГРА НАЧАТА. УНИЧТОЖАЙТЕ ВРАГОВ И ИССЛЕДУЙТЕ МИР.";
+static float g_messageTimer = 0.0f;
+
+static void spawnTankDeathEffect(float x,float y,float z);
+
+static void showGameMessage(const std::string& text, float seconds = 2.5f)
+{
+    g_message = text;
+    g_messageTimer = seconds;
+}
 
 // ============================================================
 // WEAPONS
@@ -666,7 +814,8 @@ enum ObjectType
     OBJECT_SKYSCRAPER,
     OBJECT_ROCKET_AMMO,
     OBJECT_HOUSE_ROOF,
-    OBJECT_HOUSE_MODEL
+    OBJECT_HOUSE_MODEL,
+    OBJECT_WTC_MODEL
 };
 
 struct WorldObject
@@ -745,6 +894,20 @@ struct Enemy
 };
 
 static std::vector<Enemy> g_enemies;
+
+// Pixel/voxel dissolve effect for defeated enemies.  The effect is kept
+// separate from live enemies so respawning never makes the death animation
+// disappear or reuse the live enemy transform.
+struct DeadEnemyEffect
+{
+    float x, y, z;
+    float age, life;
+    float scale;
+    int seed;
+    EnemyType type;
+};
+static std::vector<DeadEnemyEffect> g_deadEnemyEffects;
+
 static void configureWorldEnemyVariant(Enemy& e);
 static void updateOtherWorldEnemyBehavior(Enemy& e, float dt);
 
@@ -773,6 +936,8 @@ struct Projectile
     bool playerRocket = false;
     float radius = 0.10f;
     float explosionRadius = 0.0f;
+    float age = 0.0f;
+    float prevX = 0.0f, prevY = 0.0f, prevZ = 0.0f;
 };
 
 struct Explosion
@@ -856,6 +1021,12 @@ static float distance2D(float x1, float z1, float x2, float z2)
     return length2(x1 - x2, z1 - z2);
 }
 
+static float distance3D(float x1,float y1,float z1,float x2,float y2,float z2)
+{
+    const float dx=x1-x2, dy=y1-y2, dz=z1-z2;
+    return sqrtf(dx*dx+dy*dy+dz*dz);
+}
+
 static float randomFloat(float a, float b)
 {
     return a + (float)rand() / (float)RAND_MAX * (b - a);
@@ -914,6 +1085,21 @@ static float terrainHeight(float x, float z)
         return 2.4f + subtle + std::max(0.0f, edge - 0.82f) * 1.2f;
     }
 
+    // Raised foundations beneath the imported WTC complexes. The smooth
+    // mounds eliminate the visible gap under the model while keeping a
+    // walkable, natural-looking transition into the surrounding terrain.
+    const float wtcCenters[][2] = {
+        {CITY_CENTER_X+205.0f, CITY_CENTER_Z-5.0f},
+        {CITY_CENTER_X-205.0f, CITY_CENTER_Z+35.0f}
+    };
+    float wtcLift = 0.0f;
+    for (const auto& c : wtcCenters)
+    {
+        const float d = distance2D(worldX, worldZ, c[0], c[1]);
+        const float t = clampf((115.0f-d)/45.0f, 0.0f, 1.0f);
+        wtcLift = std::max(wtcLift, 5.5f*t*t*(3.0f-2.0f*t));
+    }
+
     // Large-scale mountain chains. The center remains mostly playable while
     // the outer sectors contain high peaks and valleys.
     const float m1 = 42.0f * expf(-((x - 92.0f)*(x - 92.0f) + (z + 55.0f)*(z + 55.0f)) / 1150.0f);
@@ -934,7 +1120,7 @@ static float terrainHeight(float x, float z)
         1.1f * sinf((x - z) * 0.075f) +
         0.65f * cosf((x + z) * 0.12f);
 
-    float h = m1 + m2 + m3 + m4 + ridge - valley1 - valley2 - valley3 - basin1 - basin2 + rolling;
+    float h = m1 + m2 + m3 + m4 + ridge - valley1 - valley2 - valley3 - basin1 - basin2 + rolling + wtcLift;
 
     return clampf(h, -30.0f, 72.0f);
 }
@@ -964,15 +1150,14 @@ static int nearestTunnelSegment(float x, float z, float* outDistance = nullptr)
     return best;
 }
 
+static bool tunnelCorridorContains(float x, float z, float radius);
+
 static bool isTunnelZone(float x, float z)
 {
-    float d = 0.0f;
-    const int i = nearestTunnelSegment(x,z,&d);
-    return i >= 0 && d <= g_tunnels[i].halfWidth - 0.08f;
+    return tunnelCorridorContains(x, z, 0.08f);
 }
 
 static constexpr float TUNNEL_DEPTH = 13.0f;
-static constexpr float TUNNEL_ENTRANCE_LENGTH = 26.0f;
 static constexpr float TUNNEL_WALL_H = 2.0f;
 static constexpr float TUNNEL_ROOF_R = 3.6f;
 
@@ -985,20 +1170,27 @@ static float smoothstepf(float a, float b, float x)
 
 static float tunnelFloorHeight(float x, float z)
 {
-    int seg = nearestTunnelSegment(x, z);
-    if (seg < 0) return terrainHeight(x, z);
+    const int seg = nearestTunnelSegment(x, z);
+    if (seg < 0) return terrainHeight(x, z) - TUNNEL_DEPTH;
 
-    const auto& t = g_tunnels[seg];
-    const float da = distance2D(x, z, t.ax, t.az);
-    const float db = distance2D(x, z, t.bx, t.bz);
-    const float endDist = std::min(da, db);
-
-    // The tunnel starts exactly at the surface and descends smoothly over
-    // a long entrance ramp. This removes the old artificial vertical step.
-    const float ramp = smoothstepf(0.0f, TUNNEL_ENTRANCE_LENGTH, endDist);
-    const float depth = TUNNEL_DEPTH * ramp;
-    return terrainHeight(x, z) - depth;
+    // The complete network is physically buried. There is no surface ramp:
+    // only the visible gate exists at the surface, and E teleports the player
+    // to this real underground corridor.
+    return terrainHeight(x, z) - TUNNEL_DEPTH;
 }
+
+static bool tunnelCorridorContains(float x, float z, float radius)
+{
+    for (int i = 0; i < TUNNEL_COUNT; ++i)
+    {
+        const auto& t = g_tunnels[i];
+        const float d = pointSegmentDistanceXZ(x, z, t.ax, t.az, t.bx, t.bz);
+        if (d <= t.halfWidth - radius)
+            return true;
+    }
+    return false;
+}
+
 
 static float tunnelRoofHeight(float x, float z)
 {
@@ -1073,54 +1265,12 @@ static bool tunnelTransitionAllowed(
     bool& crossingPortal,
     float& portalX, float& portalZ)
 {
+    (void)fromX; (void)fromZ; (void)toX; (void)toZ;
+    // Tunnel transitions are no longer triggered by walking into a gate.
+    // The E interaction below performs the actual transition.
     crossingPortal = false;
     portalX = toX;
     portalZ = toZ;
-
-    const float mvX = toX - fromX;
-    const float mvZ = toZ - fromZ;
-    const float mvLen = sqrtf(mvX*mvX + mvZ*mvZ);
-    if (mvLen < 0.0001f)
-        return true;
-
-    const float moveX = mvX / mvLen;
-    const float moveZ = mvZ / mvLen;
-
-    int seg = -1;
-    bool start = false;
-    float d = 0.0f;
-    float dirX = 0.0f, dirZ = 0.0f;
-    if (!nearestPortal(toX, toZ, seg, start, d, dirX, dirZ))
-        return true;
-
-    const float triggerRadius = g_tunnels[seg].halfWidth + 2.75f;
-    if (d > triggerRadius)
-        return true;
-
-    // Entering: move in the portal's inward direction.
-    // Exiting: move in the opposite direction.
-    float desiredDot = moveX * dirX + moveZ * dirZ;
-    if (g_inTunnel)
-    {
-        if (desiredDot > -0.10f)
-            return true;
-
-        const float px = start ? g_tunnels[seg].ax : g_tunnels[seg].bx;
-        const float pz = start ? g_tunnels[seg].az : g_tunnels[seg].bz;
-        portalX = px - dirX * 3.5f;
-        portalZ = pz - dirZ * 3.5f;
-        crossingPortal = true;
-        return true;
-    }
-
-    if (desiredDot < 0.10f)
-        return true;
-
-    const float px = start ? g_tunnels[seg].ax : g_tunnels[seg].bx;
-    const float pz = start ? g_tunnels[seg].az : g_tunnels[seg].bz;
-    portalX = px + dirX * 3.5f;
-    portalZ = pz + dirZ * 3.5f;
-    crossingPortal = true;
     return true;
 }
 
@@ -1459,16 +1609,17 @@ static bool rayTerrainHit(float ox, float oy, float oz, float dx, float dy, floa
 static bool tunnelWallHitSegment(float x0,float y0,float z0,float x1,float y1,float z1)
 {
     const float dx=x1-x0, dy=y1-y0, dz=z1-z0;
-    const int steps=24;
+    const bool startsInside = isTunnelZone(x0,z0);
+    const int steps=48;
     for(int i=0;i<=steps;++i)
     {
         const float u=(float)i/(float)steps;
         const float x=x0+dx*u, y=y0+dy*u, z=z0+dz*u;
-        if (isTunnelZone(x,z))
+        if (startsInside)
         {
+            if (!tunnelCorridorContains(x,z,0.02f)) return true;
             if (y < tunnelFloorHeight(x,z)+0.08f || y > tunnelRoofHeight(x,z)-0.08f) return true;
         }
-        else if (isTunnelZone(x0,z0)) return true;
     }
     return false;
 }
@@ -1521,6 +1672,24 @@ static bool circleIntersectsTreeTrunk(
     return dx * dx + dz * dz < radius * radius;
 }
 
+static bool pointInsideRotatedBox(float x, float z, const WorldObject& o, float extra)
+{
+    const float c = cosf(o.yaw);
+    const float s = sinf(o.yaw);
+    const float dx = x - o.x;
+    const float dz = z - o.z;
+    // Transform world position into the object's local coordinates.
+    const float lx =  dx*c + dz*s;
+    const float lz = -dx*s + dz*c;
+    return lx >= -o.sx*0.5f-extra && lx <= o.sx*0.5f+extra &&
+           lz >= -o.sz*0.5f-extra && lz <= o.sz*0.5f+extra;
+}
+
+static bool objectIsHouseCollision(const WorldObject& o)
+{
+    return o.type == OBJECT_HOUSE_ROOF;
+}
+
 static bool playerCollidesWithObject(
     float x,
     float z,
@@ -1529,6 +1698,9 @@ static bool playerCollidesWithObject(
 {
     if (o.type == OBJECT_TREE)
         return circleIntersectsTreeTrunk(x, z, o, radius);
+
+    if (objectIsHouseCollision(o))
+        return pointInsideRotatedBox(x, z, o, radius);
 
     return pointInsideBox(x, z, o, radius);
 }
@@ -1542,9 +1714,12 @@ static float playerFloorHeight(float x, float z)
         if (!o.active || o.world != g_world) continue;
         if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT || o.type == OBJECT_HOUSE_MODEL) continue;
         if (underground && o.type == OBJECT_HOUSE_ROOF) continue;
-        if (!pointInsideBox(x,z,o,PLAYER_RADIUS*0.35f)) continue;
+        if (!playerCollidesWithObject(x,z,o,PLAYER_RADIUS*0.35f)) continue;
         const float top=o.y+o.sy*0.5f;
         if(top>floor+0.03f && top-floor<=PLAYER_STEP_HEIGHT)
+            floor=top;
+        else if(o.type == OBJECT_HOUSE_ROOF && !g_onGround && g_vy<=0.0f &&
+                g_py>=top-0.85f)
             floor=top;
         else if(!g_onGround && g_vy<=0.0f && top>floor+0.03f &&
                 top-floor<=PLAYER_JUMPABLE_HEIGHT && g_py>=top-0.55f)
@@ -1553,7 +1728,7 @@ static float playerFloorHeight(float x, float z)
     return floor;
 }
 
-static bool playerInsideStepableObstacle(float x, float z)
+[[maybe_unused]] static bool playerInsideStepableObstacle(float x, float z)
 {
     const float base = currentFloorHeight(x,z);
     for (const auto& o : g_objects)
@@ -1570,53 +1745,51 @@ static bool playerInsideStepableObstacle(float x, float z)
 
 static bool tunnelMovementClear(float x, float z, float radius)
 {
-    if (!isTunnelZone(x, z))
-        return true;
-
-    float d = 0.0f;
-    const int i = nearestTunnelSegment(x, z, &d);
-    if (i < 0)
-        return false;
-
-    return d <= g_tunnels[i].halfWidth - radius - 0.18f;
+    // Exact union-of-segments test: movement is allowed only when the whole
+    // player circle fits inside at least one tunnel cross-section. This keeps
+    // the contour solid at bends and junctions instead of relying on the
+    // nearest segment, which could previously let the player clip through a wall.
+    return tunnelCorridorContains(x, z, radius + 0.16f);
 }
 
 static bool playerBlocked(float x, float z)
 {
-    if (g_inTunnel && isTunnelZone(x, z) && !tunnelMovementClear(x, z, PLAYER_RADIUS))
-        return true;
-
-    const bool stepable = playerInsideStepableObstacle(x,z);
-    if (stepable)
-        return false;
+    // Once inside a tunnel, leaving the tunnel mouth is also an explicit E
+    // action.  This prevents accidental automatic transitions.
+    if (g_inTunnel)
+    {
+        if (!isTunnelZone(x, z))
+            return true;
+        if (!tunnelMovementClear(x, z, PLAYER_RADIUS))
+            return true;
+    }
 
     if (otherWorldObjectBlocked(x, z, PLAYER_RADIUS))
         return true;
 
+    const float playerBottom = g_py;
+    const float playerTop = g_py + PLAYER_HEIGHT;
+
     for (const auto& o : g_objects)
     {
         if (!o.active || o.world != g_world) continue;
-        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT || o.type == OBJECT_HOUSE_MODEL) continue;
-        if (playerCollidesWithObject(x, z, o, PLAYER_RADIUS))
-        {
-            const float bottom=o.y-o.sy*0.5f;
-            const float top=o.y+o.sy*0.5f;
+        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT ||
+            o.type == OBJECT_HOUSE_MODEL) continue;
+        if (!playerCollidesWithObject(x, z, o, PLAYER_RADIUS)) continue;
 
-            // Roofs use a vertical collision test: at ground level the player
-            // can enter through the doorway, while the slab blocks the body
-            // when jumping into it and acts as a collision surface above.
-            if(o.type == OBJECT_HOUSE_ROOF)
-            {
-                const float playerBottom=g_py;
-                const float playerTop=g_py+PLAYER_HEIGHT;
-                if(playerTop <= bottom+0.03f || playerBottom >= top-0.03f)
-                    continue;
-                return true;
-            }
+        const float bottom = o.y - o.sy * 0.5f;
+        const float top = o.y + o.sy * 0.5f;
 
-            if(!g_onGround && g_py>=top-0.05f) continue;
-            return true;
-        }
+        // A box only blocks the horizontal movement when the player's body
+        // actually overlaps its vertical span.  Standing on its top is not
+        // treated as being inside it.  This fixes the old "teleport inside /
+        // freeze" behaviour on roofs and other obstacles.
+        if (playerTop <= bottom + 0.04f)
+            continue;
+        if (playerBottom >= top - 0.10f)
+            continue;
+
+        return true;
     }
     return false;
 }
@@ -1631,7 +1804,7 @@ static bool enemyBlocked(float x, float z, float radius)
         if (!o.active || o.world != g_world)
             continue;
 
-        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT)
+        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT || o.type == OBJECT_HOUSE_MODEL)
             continue;
 
         if (pointInsideBox(x, z, o, radius))
@@ -1897,7 +2070,7 @@ static void drawMedkit(float x, float baseY, float z)
     drawBox(x, baseY + 0.83f, z, 0.65f, 0.05f, 0.18f, 0.92f, 0.03f, 0.03f);
 }
 
-static void drawBuildingWall(const WorldObject& o)
+[[maybe_unused]] static void drawBuildingWall(const WorldObject& o)
 {
     // Large settlement walls use a warmer, house-like material.
     glPushMatrix();
@@ -1907,7 +2080,7 @@ static void drawBuildingWall(const WorldObject& o)
     glPopMatrix();
 }
 
-static void drawGableRoofMesh(float x, float y, float z, float w, float d, float h, float yaw)
+[[maybe_unused]] static void drawGableRoofMesh(float x, float y, float z, float w, float d, float h, float yaw)
 {
     const float c=cosf(yaw), si=sinf(yaw);
     auto V=[&](float lx,float ly,float lz){
@@ -1927,33 +2100,37 @@ static void drawGableRoofMesh(float x, float y, float z, float w, float d, float
     glEnd();
 }
 
-static void drawHouseRoof(float x,float y,float z,float w,float d,float yaw)
+[[maybe_unused]] static void drawHouseRoof(float x,float y,float z,float w,float d,float yaw)
 { (void)x; (void)y; (void)z; (void)w; (void)d; (void)yaw; }
 
 static void addHouse(float cx, float cz, float rotation = 0.0f)
 {
-    // New house design: two-storey masonry shell, broad porch, framed windows,
-    // and a real gable roof. Collision is split into wall sections around the door.
-    const float W=15.0f, D=12.0f, H=6.8f, T=0.70f, DOOR=3.2f;
-    const float side=(W-DOOR)*0.5f;
-    const float c=cosf(rotation), si=sinf(rotation);
-    auto addPart=[&](float lx,float lz,float sx,float sy,float sz){
-        const float x=cx+lx*c-lz*si, z=cz+lx*si+lz*c;
-        g_objects.push_back({OBJECT_BUILDING,x,sy*0.5f,z,sx,sy,sz,true,WORLD_MAIN,rotation});
-    };
-    addPart(-(DOOR*0.5f+side*0.5f),-D*0.5f,side,H,T);
-    addPart( +(DOOR*0.5f+side*0.5f),-D*0.5f,side,H,T);
-    addPart(0,D*0.5f,W,H,T);
-    addPart(-W*0.5f,0,T,H,D); addPart(W*0.5f,0,T,H,D);
-    // Foundation and porch.
-    addPart(0,0,W+0.8f,0.65f,D+0.8f);
-    addPart(0,-D*0.5f-1.0f,4.8f,0.55f,2.1f);
-    // Door lintel.
-    addPart(0,-D*0.5f,DOOR,1.5f,T);
-    // Roof collision volume is conservative and positioned at the actual roof base.
-    // Thin roof slab: blocks jumping through the roof without sealing the doorway.
-    g_objects.push_back({OBJECT_HOUSE_ROOF,cx,H-0.02f,cz,W+1.8f,0.55f,D+1.4f,true,WORLD_MAIN,rotation});
-    g_objects.push_back({OBJECT_HOUSE_MODEL,cx,0.0f,cz,12.15f,6.85f,15.0f,true,WORLD_MAIN,rotation});
+    // The supplied OBJ is 12.15 x 6.86 x 15.0 world units at the current
+    // render scale.  Use matching collision volumes, rotated with the model.
+    // The house is deliberately a solid building: entering it is disabled.
+    const float baseY = terrainHeight(cx, cz);
+    const float bodyW = 12.8f;
+    const float bodyD = 15.6f;
+    const float bodyH = 5.55f;
+    const float roofW = 13.5f;
+    const float roofD = 16.2f;
+    const float roofBottom = baseY + 5.05f;
+    const float roofH = 1.85f;
+
+    g_objects.push_back({
+        OBJECT_BUILDING, cx, baseY + bodyH*0.5f, cz,
+        bodyW, bodyH, bodyD, true, WORLD_MAIN, rotation
+    });
+
+    g_objects.push_back({
+        OBJECT_HOUSE_ROOF, cx, roofBottom + roofH*0.5f, cz,
+        roofW, roofH, roofD, true, WORLD_MAIN, rotation
+    });
+
+    g_objects.push_back({
+        OBJECT_HOUSE_MODEL, cx, baseY, cz,
+        bodyW, bodyH, bodyD, true, WORLD_MAIN, rotation
+    });
 }
 
 // ============================================================
@@ -2170,6 +2347,19 @@ static void respawnPlayer()
     g_vy = 0.0f;
     g_onGround = true;
     g_health = g_maxHealth;
+    // A death fully replenishes the player's ammunition.
+    for (auto& w : g_weapons)
+    {
+        w.ammo = w.magazineSize;
+        const int weaponIndex = static_cast<int>(&w - g_weapons);
+        w.reserve = weaponIndex == WEAPON_ROCKET ? 6 :
+                    (weaponIndex == WEAPON_SHOTGUN ? 48 :
+                     (weaponIndex == WEAPON_RIFLE ? 150 : 72));
+        w.reloadTimer = 0.0f;
+        w.cooldown = 0.0f;
+    }
+    g_currentWeapon = (g_world == WORLD_OCEAN) ? g_currentWeapon :
+                      (g_currentWeapon == WEAPON_ROCKET ? WEAPON_PISTOL : g_currentWeapon);
     g_deadTimer = 0.0f;
     g_damageFlash = 0.0f;
     g_firstMouse = true;
@@ -2203,14 +2393,17 @@ static void switchWeapon(int index)
     if (index < 0 || index >= 4)
         return;
 
-    // The rocket launcher exists only in the ocean world.
+    // Weapon selection must never perform a world transition. The RPG-7 is
+    // only selectable in the ocean world; all other weapons are universal.
     if (index == WEAPON_ROCKET && g_world != WORLD_OCEAN)
         return;
 
+    const int oldWeapon = g_currentWeapon;
     g_currentWeapon = index;
+    if (g_currentWeapon < 0 || g_currentWeapon >= 4)
+        g_currentWeapon = oldWeapon;
 
     g_weaponRecoil = 0.0f;
-
     g_message.clear();
 }
 
@@ -2307,7 +2500,9 @@ static void shoot()
         if (g_world != WORLD_OCEAN) { g_currentWeapon=WEAPON_PISTOL; return; }
         if (w.cooldown > 0.0f) return;
         if (w.ammo <= 0) { reloadWeapon(); return; }
-        w.ammo--; w.cooldown=w.fireDelay; g_weaponRecoil=w.recoil; g_muzzleFlash=1.0f; spawnPlayerRocket(); return;
+        w.ammo--; w.cooldown=w.fireDelay; g_weaponRecoil=w.recoil; g_muzzleFlash=1.0f; spawnPlayerRocket();
+        if (w.ammo <= 0) reloadWeapon();
+        return;
     }
 
     if (w.cooldown > 0.0f)
@@ -2320,6 +2515,8 @@ static void shoot()
     }
 
     w.ammo--;
+    if (w.ammo <= 0)
+        reloadWeapon();
 
     w.cooldown =
         w.fireDelay;
@@ -2451,10 +2648,10 @@ static void shoot()
                 continue;
 
             const float baseY = e.type == ENEMY_DRONE ? e.y - 0.65f : terrainSupportHeight(e.x,e.z,e.radius);
-            const float bodyHeight = (e.type == ENEMY_TANK) ? 3.40f : (e.type == ENEMY_DRONE ? 0.95f : 1.75f);
-            const float bodyRadius = (e.type == ENEMY_TANK) ? 1.30f : (e.type == ENEMY_DRONE ? 0.55f : e.radius + 0.05f);
+            const float bodyHeight = (e.type == ENEMY_TANK) ? 3.80f : (e.type == ENEMY_DRONE ? 0.95f : 1.75f);
+            const float bodyRadius = (e.type == ENEMY_TANK) ? 2.05f : (e.type == ENEMY_DRONE ? 0.55f : e.radius + 0.05f);
             const float headCenterY = (e.type == ENEMY_DRONE) ? (baseY + 1.30f) : (baseY + bodyHeight + 0.28f);
-            const float headRadius = (e.type == ENEMY_TANK) ? 0.68f : (e.type == ENEMY_DRONE ? 0.28f : 0.36f);
+            const float headRadius = (e.type == ENEMY_TANK) ? 1.00f : (e.type == ENEMY_DRONE ? 0.28f : 0.36f);
             float bodyT = w.range, headT = w.range;
             const bool hitBody = rayAABB(g_px,shotOriginY,g_pz,dx,dy,dz,
                                          e.x,baseY+bodyHeight*0.5f,e.z,
@@ -2466,7 +2663,11 @@ static void shoot()
             if (hitBody && bodyT < enemyT) { enemyT=bodyT; enemyHeadshot=false; }
             if (hitHead && headT < enemyT) { enemyT=headT; enemyHeadshot=(e.type != ENEMY_DRONE); }
 
-            if (enemyT < bestT)
+            // Tanks are large moving targets. If their hit volume touches a
+            // static collision volume at almost the same distance, prefer the
+            // tank instead of letting its own/nearby cover swallow the shot.
+            const float tankTieEpsilon = (e.type == ENEMY_TANK) ? 0.22f : 0.0f;
+            if (enemyT < bestT + tankTieEpsilon)
             {
                 bestT = enemyT;
                 bestEnemy = (int)i;
@@ -2502,7 +2703,10 @@ static void shoot()
                 g_enemies[bestEnemy];
 
             const float damageMultiplier = bestHeadshot ? 2.5f : 1.0f;
-            e.hp -= w.damage * damageMultiplier;
+            const float appliedDamage = (e.type == ENEMY_TANK)
+                ? std::max(1.0f, w.damage * damageMultiplier)
+                : w.damage * damageMultiplier;
+            e.hp -= appliedDamage;
             e.hitFlash = 1.0f;
             g_hitMarker = 1.0f;
             if (bestHeadshot)
@@ -2511,8 +2715,11 @@ static void shoot()
             if (e.hp <= 0.0f)
             {
                 e.hp = 0.0f;
+                if (e.type == ENEMY_TANK)
+                    spawnTankDeathEffect(e.x,e.y,e.z);
 
                 e.alive = false;
+                g_deadEnemyEffects.push_back({e.x,e.y,e.z,0.0f,0.75f,1.0f,rand(),e.type});
 
                 e.respawn = 4.0f;
 
@@ -2522,21 +2729,12 @@ static void shoot()
                     100;
 
                 g_kills++;
-
-                if (g_kills == 1)
-                {
-                    g_message = "ВРАГ УНИЧТОЖЕН!";
-                }
-
-                if (g_kills == 5)
-                {
-                    g_message = "ВРАГ УНИЧТОЖЕН!";
-                }
-
-                if (g_kills == 10)
-                {
-                    g_message = "ВРАГ УНИЧТОЖЕН!";
-                }
+                const char* killName =
+                    e.type == ENEMY_FAST ? "БЫСТРЫЙ ВРАГ УНИЧТОЖЕН!" :
+                    e.type == ENEMY_DRONE ? "ДРОН УНИЧТОЖЕН!" :
+                    e.type == ENEMY_TANK ? "ТАНК УНИЧТОЖЕН!" :
+                    "ВРАГ УНИЧТОЖЕН!";
+                showGameMessage(killName, 2.4f);
             }
         }
     }
@@ -2748,6 +2946,7 @@ static void createWorld()
 
     // Separate city biome with 26 detailed skyscrapers and conservative AABB hitboxes.
     createCityBiome();
+    createWtcBuildings();
 
     // Far cover, rocks and outposts make the enlarged map visually and tactically interesting.
     const float farCover[][3] = {
@@ -2924,6 +3123,8 @@ static bool safeDroneSpawn(float& outX, float& outZ)
     return false;
 }
 
+static bool g_pauseMenu = false;
+
 static void resetGame()
 {
     g_px = 0.0f;
@@ -2946,6 +3147,11 @@ static void resetGame()
     g_score = 0;
 
     g_kills = 0;
+    g_deadEnemyEffects.clear();
+    g_submarineDeathEffects.clear();
+    g_oceanVictoryShown = false;
+    g_tankDeathEffects.clear();
+    g_messageTimer = 0.0f;
 
     g_gameTime = 0.0f;
     g_yaw = 0.0f;
@@ -2955,6 +3161,7 @@ static void resetGame()
     g_muzzleFlash = 0.0f;
     g_hitMarker = 0.0f;
     g_firstMouse = true;
+    g_pauseMenu = false;
 
     g_message =
         "ИГРА НАЧАТА. УНИЧТОЖАЙТЕ ВРАГОВ И ИССЛЕДУЙТЕ МИР.";
@@ -2976,6 +3183,11 @@ static void resetGame()
     g_explosions.clear();
 
     // Recreate pickups and world objects on restart.
+    // createWorld() samples terrainHeight(), so the active world must already
+    // be MAIN; otherwise restarting from the ocean/winter world can place
+    // surface collision geometry at the wrong height.
+    g_world = WORLD_MAIN;
+    g_inTunnel = false;
     createWorld();
     for(int i=0;i<24;++i)
     {
@@ -3088,6 +3300,52 @@ static void drawJetpackFlames()
     glPopMatrix();
 }
 
+static bool tryUseTunnelGate()
+{
+    int seg = -1;
+    bool start = false;
+    float dist = 0.0f;
+    float dirX = 0.0f, dirZ = 0.0f;
+    if (!nearestPortal(g_px, g_pz, seg, start, dist, dirX, dirZ))
+        return false;
+
+    const float useRadius = g_tunnels[seg].halfWidth + 3.0f;
+    if (dist > useRadius)
+        return false;
+
+    const float px = start ? g_tunnels[seg].ax : g_tunnels[seg].bx;
+    const float pz = start ? g_tunnels[seg].az : g_tunnels[seg].bz;
+
+    if (!g_inTunnel)
+    {
+        // The visible gate remains at the surface. The actual network is
+        // fully buried, so E teleports the player to a point safely inside it.
+        const float enterOffset = 18.0f;
+        g_inTunnel = true;
+        g_px = px + dirX * enterOffset;
+        g_pz = pz + dirZ * enterOffset;
+        g_py = tunnelFloorHeight(g_px, g_pz) + 0.03f;
+        g_vy = 0.0f;
+        g_onGround = true;
+        g_message = "ВХОД В ТУННЕЛЬ";
+        g_messageTimer = 1.8f;
+        return true;
+    }
+
+    // Exit only when the player explicitly presses E at the gate.
+    // Place the player on the surface a few metres outside the entrance.
+    const float exitOffset = 4.8f;
+    g_inTunnel = false;
+    g_px = px - dirX * exitOffset;
+    g_pz = pz - dirZ * exitOffset;
+    g_py = terrainHeight(g_px, g_pz) + 0.03f;
+    g_vy = 0.0f;
+    g_onGround = true;
+    g_message = "ВЫХОД ИЗ ТУННЕЛЯ";
+    g_messageTimer = 1.8f;
+    return true;
+}
+
 static void updatePlayer(float dt)
 {
     if (!std::isfinite(g_px) || !std::isfinite(g_py) || !std::isfinite(g_pz) ||
@@ -3184,25 +3442,24 @@ static void updatePlayer(float dt)
                 return false;
 
             const bool oldTunnelState = g_inTunnel;
-            const bool newTunnelState = crossingPortal ? !oldTunnelState : oldTunnelState;
-            float finalX = crossingPortal ? portalX : nx;
-            float finalZ = crossingPortal ? portalZ : nz;
+            float finalX = nx;
+            float finalZ = nz;
 
             // Seamless world wrapping: crossing any edge enters the opposite
             // side. This is applied before collision testing at the destination.
-            bool wrapped = false;
-            if (finalX > ARENA) { finalX = -ARENA + 0.75f; wrapped = true; }
-            else if (finalX < -ARENA) { finalX = ARENA - 0.75f; wrapped = true; }
-            if (finalZ > ARENA) { finalZ = -ARENA + 0.75f; wrapped = true; }
-            else if (finalZ < -ARENA) { finalZ = ARENA - 0.75f; wrapped = true; }
+            if (finalX > ARENA) finalX = -ARENA + 0.75f;
+            else if (finalX < -ARENA) finalX = ARENA - 0.75f;
+            if (finalZ > ARENA) finalZ = -ARENA + 0.75f;
+            else if (finalZ < -ARENA) finalZ = ARENA - 0.75f;
 
             // Portal crossing is a controlled state change. We validate the
             // destination only against the collision layer that is active
             // after the transition, which prevents false blocking at the mouth.
-            g_inTunnel = wrapped ? false : newTunnelState;
+            // Tunnel state is changed only by E; walking never toggles it.
+            g_inTunnel = oldTunnelState;
 
-            if (!crossingPortal && (playerBlocked(finalX, finalZ) ||
-                (g_world != WORLD_MAIN && otherWorldObjectBlocked(finalX, finalZ, 0.55f))))
+            if (playerBlocked(finalX, finalZ) ||
+                (g_world != WORLD_MAIN && otherWorldObjectBlocked(finalX, finalZ, 0.55f)))
             {
                 // Trees use a compact trunk collider.  If a frame starts
                 // slightly inside one because of a large dt or a previous
@@ -3243,27 +3500,21 @@ static void updatePlayer(float dt)
             g_px = finalX;
             g_pz = finalZ;
 
-            if (crossingPortal)
-            {
-                if (g_inTunnel)
-                {
-                    g_py = tunnelFloorHeight(g_px, g_pz);
-                    g_py += 0.02f;
-                }
-                else
-                {
-                    g_py = terrainHeight(g_px, g_pz);
-                    g_py += 0.02f;
-                }
-                g_vy = 0.0f;
-                g_onGround = true;
-            }
-
+            (void)crossingPortal;
+            (void)portalX;
+            (void)portalZ;
             return true;
         };
 
-        tryMove(g_px + mx*amount, g_pz);
-        tryMove(g_px, g_pz + mz*amount);
+        // Sweep movement in small increments so high jetpack/sprint speed
+        // cannot tunnel through walls or roofs between frames.
+        const int steps = std::max(1, (int)ceilf(amount / 0.28f));
+        const float stepAmount = amount / (float)steps;
+        for (int i = 0; i < steps; ++i)
+        {
+            tryMove(g_px + mx * stepAmount, g_pz);
+            tryMove(g_px, g_pz + mz * stepAmount);
+        }
     }
 
     // jump
@@ -3287,7 +3538,19 @@ static void updatePlayer(float dt)
 
     // g_py is absolute world-space feet Y. While grounded we snap directly
     // to the active floor; when airborne we integrate gravity in world space.
-    const float floorY = playerFloorHeight(g_px, g_pz);
+    float floorY = playerFloorHeight(g_px, g_pz);
+    if (g_world == WORLD_OCEAN)
+        floorY = std::max(floorY, -1.05f);
+
+    // Ocean-world safety net: never allow the jetpack player to remain below
+    // the walkable water/island surface after a wrap or a large physics step.
+    if (g_world == WORLD_OCEAN && g_py < floorY - 3.0f)
+    {
+        g_py = floorY + 0.03f;
+        g_vy = 0.0f;
+        g_onGround = true;
+    }
+
     if (g_onGround)
     {
         g_py = floorY;
@@ -3305,6 +3568,17 @@ static void updatePlayer(float dt)
         if (g_py <= floorY)
         {
             g_py = floorY;
+            g_vy = 0.0f;
+            g_onGround = true;
+        }
+    }
+
+    if (g_world == WORLD_OCEAN)
+    {
+        const float safeOceanFloor = std::max(playerFloorHeight(g_px,g_pz), -1.05f);
+        if (g_py < safeOceanFloor)
+        {
+            g_py = safeOceanFloor;
             g_vy = 0.0f;
             g_onGround = true;
         }
@@ -3340,7 +3614,7 @@ static void spawnExplosion(float x,float y,float z,float radius,float damage,boo
             if(!sub.active) continue;
             const float d=sqrtf((sub.x-x)*(sub.x-x)+(sub.y-y)*(sub.y-y)+(sub.z-z)*(sub.z-z));
             const float hitR=radius+15.0f;
-            if(d<=hitR){ const float f=clampf(1.0f-d/std::max(hitR,0.01f),0.25f,1.0f); sub.hp-=damage*f; if(sub.hp<=0.0f){sub.hp=0.0f;sub.active=false;g_score+=1200;g_kills++;g_message="СУБМАРИН УНИЧТОЖЕН!";} }
+            if(d<=hitR){ const float f=clampf(1.0f-d/std::max(hitR,0.01f),0.90f,1.0f); sub.hp-=damage*f; if(sub.hp<=0.0f){sub.hp=0.0f;sub.active=false;g_score+=1200;g_kills++;g_message="СУБМАРИН УНИЧТОЖЕН!";g_messageTimer=2.4f;g_submarineDeathEffects.push_back({sub.x,sub.y,sub.z,0.0f,2.4f,(unsigned int)(rand()*2654435761u)});} }
         }
     }
     if(hurtSubs)
@@ -3350,10 +3624,153 @@ static void spawnExplosion(float x,float y,float z,float radius,float damage,boo
             if(!e.alive || e.world!=g_world) continue;
             const float ey=(e.type==ENEMY_DRONE)?e.y:terrainSupportHeight(e.x,e.z,e.radius)+1.0f;
             const float d=sqrtf((e.x-x)*(e.x-x)+(ey-y)*(ey-y)+(e.z-z)*(e.z-z));
-            if(d<=radius){ const float f=clampf(1.0f-d/std::max(radius,0.01f),0.15f,1.0f); e.hp-=damage*0.75f*f; e.hitFlash=1.0f; if(e.hp<=0.0f){e.hp=0.0f;e.alive=false;e.respawn=4.0f;g_score+=e.type==ENEMY_TANK?300:(e.type==ENEMY_FAST?150:100);g_kills++;} }
+            if(d<=radius){ const float f=clampf(1.0f-d/std::max(radius,0.01f),0.15f,1.0f); e.hp-=damage*0.75f*f; e.hitFlash=1.0f; if(e.hp<=0.0f){e.hp=0.0f;if(e.type==ENEMY_TANK) spawnTankDeathEffect(e.x,e.y,e.z);e.alive=false;e.respawn=4.0f;g_score+=e.type==ENEMY_TANK?300:(e.type==ENEMY_FAST?150:100);g_kills++; g_deadEnemyEffects.push_back({e.x,e.y,e.z,0.0f,0.75f,1.0f,rand(),e.type}); showGameMessage(e.type==ENEMY_FAST?"БЫСТРЫЙ ВРАГ УНИЧТОЖЕН!":e.type==ENEMY_DRONE?"ДРОН УНИЧТОЖЕН!":"ВРАГ УНИЧТОЖЕН!",2.4f);} }
+        }
+    }
+    if (hurtSubs && !g_oceanVictoryShown)
+    {
+        bool allDestroyed = !g_oceanSubmarines.empty();
+        for (const auto& sub : g_oceanSubmarines)
+            if (sub.active) { allDestroyed = false; break; }
+        if (allDestroyed)
+        {
+            g_oceanVictoryShown = true;
+            showGameMessage("ПОБЕДА! МОРСКОЙ МИР СПАСЁН!", 6.0f);
         }
     }
 }
+static void updateDeadEnemyEffects(float dt)
+{
+    for (auto& fx : g_deadEnemyEffects)
+    {
+        fx.age += dt;
+    }
+    g_deadEnemyEffects.erase(
+        std::remove_if(g_deadEnemyEffects.begin(), g_deadEnemyEffects.end(),
+                       [](const DeadEnemyEffect& fx){ return fx.age >= fx.life; }),
+        g_deadEnemyEffects.end());
+}
+
+static void spawnTankDeathEffect(float x,float y,float z)
+{
+    g_tankDeathEffects.push_back({x,y,z,0.0f,1.55f,(unsigned int)(rand()*747796405u+1u)});
+}
+static void updateTankDeathEffects(float dt)
+{
+    for(auto& fx:g_tankDeathEffects) fx.age+=dt;
+    g_tankDeathEffects.erase(std::remove_if(g_tankDeathEffects.begin(),g_tankDeathEffects.end(),
+        [](const TankDeathEffect& fx){return fx.age>=fx.life;}),g_tankDeathEffects.end());
+}
+static void drawTankDeathEffects()
+{
+    for(const auto& fx:g_tankDeathEffects)
+    {
+        const float t=clampf(fx.age/fx.life,0.0f,1.0f);
+        const float burst=1.0f+7.0f*t;
+        glPushMatrix();
+        glTranslatef(fx.x,fx.y+1.2f,fx.z);
+        glDisable(GL_TEXTURE_2D);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+        // Large expanding fireball shell.
+        glColor4f(1.0f,0.20f,0.03f,(1.0f-t)*0.78f);
+        glBegin(GL_TRIANGLE_FAN);
+        glVertex3f(0,0,0);
+        for(int i=0;i<=24;++i){const float a=2.0f*(float)M_PI*i/24.0f; glVertex3f(cosf(a)*burst, sinf(a)*burst, 0.0f);}
+        glEnd();
+        glColor4f(1.0f,0.72f,0.08f,(1.0f-t)*0.65f);
+        glBegin(GL_TRIANGLE_FAN);
+        glVertex3f(0,0,0);
+        for(int i=0;i<=24;++i){const float a=2.0f*(float)M_PI*i/24.0f; glVertex3f(cosf(a)*burst*0.62f, sinf(a)*burst*0.62f, 0.0f);}
+        glEnd();
+        // Rising smoke spheres / debris.
+        for(int i=0;i<16;++i)
+        {
+            const float a=2.0f*(float)M_PI*i/16.0f;
+            const float r=(1.0f+0.08f*(fx.seed%17))*burst*0.55f;
+            const float y=(0.7f+0.12f*(i%5))*burst + 0.5f*sinf(i+fx.age*5.0f);
+            const float sx=0.22f+0.10f*((i*7)%5);
+            glColor4f(i%3==0?0.20f:0.55f, i%3==0?0.20f:0.16f, i%3==0?0.22f:0.05f, (1.0f-t)*0.62f);
+            glPushMatrix();
+            glTranslatef(cosf(a)*r,y,sinf(a)*r);
+            glRotatef((fx.age*240.0f+i*23.0f),1,1,0);
+            drawBox(0,0,0,sx,sx,sx,0.25f,0.20f,0.16f);
+            glPopMatrix();
+        }
+        glDisable(GL_BLEND);
+        glEnable(GL_TEXTURE_2D);
+        glPopMatrix();
+    }
+}
+
+static void drawDeadEnemyEffects()
+{
+    for (const auto& fx : g_deadEnemyEffects)
+    {
+        const int count = 30;
+        for (int i=0;i<count;++i)
+        {
+            // Stable pseudo-random voxel positions from the stored seed.
+            unsigned int h=(unsigned int)(fx.seed + i*747796405u);
+            h ^= h >> 16; h *= 2246822519u; h ^= h >> 13;
+            const float rx=((h&255u)/255.0f)-0.5f;
+            const float rz=(((h>>8)&255u)/255.0f)-0.5f;
+            const float ry=((i%10)/9.0f);
+            const float delay=0.12f*(i%5);
+            const float q=clampf((fx.age-delay)/std::max(fx.life-delay,0.001f),0.0f,1.0f);
+            if(q<=0.0f) continue;
+            const float px=fx.x + rx*(fx.type==ENEMY_TANK?2.1f:1.0f) * (1.0f+q*0.8f);
+            const float pz=fx.z + rz*(fx.type==ENEMY_TANK?2.3f:1.1f) * (1.0f+q*0.8f);
+            const float py=fx.y + ry*(fx.type==ENEMY_TANK?3.0f:2.4f) + q*(0.8f + 1.4f*(0.3f+rx*rx));
+            const float sz=std::max(0.035f,0.16f*(1.0f-q));
+            const float shade=0.35f + 0.65f*(1.0f-q);
+            drawBox(px,py,pz,sz,sz,sz,shade,shade*0.78f,0.18f+0.45f*shade);
+        }
+    }
+}
+
+static void updateSubmarineDeathEffects(float dt)
+{
+    for (auto& fx : g_submarineDeathEffects) fx.age += dt;
+    g_submarineDeathEffects.erase(
+        std::remove_if(g_submarineDeathEffects.begin(), g_submarineDeathEffects.end(),
+                       [](const SubmarineDeathEffect& fx){ return fx.age >= fx.life; }),
+        g_submarineDeathEffects.end());
+}
+
+static void drawSubmarineDeathEffects()
+{
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+    glDisable(GL_CULL_FACE);
+    for (const auto& fx : g_submarineDeathEffects)
+    {
+        const float q = clampf(fx.age / std::max(fx.life,0.001f), 0.0f, 1.0f);
+        const float expand = 8.0f + 62.0f * smoothstepf(0.0f,1.0f,q);
+        // Three-dimensional expanding shock shells made from many volumetric
+        // chunks; the effect is deliberately much larger than a normal rocket.
+        for (int i=0;i<72;++i)
+        {
+            unsigned int h = fx.seed + (unsigned int)i * 747796405u;
+            h ^= h >> 16; h *= 2246822519u; h ^= h >> 13;
+            const float a = ((h & 1023u) / 1023.0f) * 2.0f * (float)M_PI;
+            const float b = (((h >> 10) & 1023u) / 1023.0f - 0.5f) * (float)M_PI;
+            const float radial = expand * (0.28f + 0.72f * (((h >> 20) & 255u) / 255.0f));
+            const float px = fx.x + cosf(b)*cosf(a)*radial;
+            const float py = fx.y + sinf(b)*radial;
+            const float pz = fx.z + cosf(b)*sinf(a)*radial;
+            const float s = 0.8f + 2.8f*(1.0f-q);
+            const float hot = 0.45f + 0.55f*(1.0f-q);
+            drawBox(px,py,pz,s,s,s,1.0f,0.16f*hot,0.025f);
+        }
+        drawBox(fx.x,fx.y,fx.z,expand*0.42f,expand*0.42f,expand*0.42f,1.0f,0.18f,0.025f);
+        drawBox(fx.x,fx.y,fx.z,expand*0.72f,expand*0.12f,expand*0.12f,1.0f,0.55f,0.04f);
+        drawBox(fx.x,fx.y,fx.z,expand*0.12f,expand*0.72f,expand*0.12f,1.0f,0.32f,0.02f);
+        drawBox(fx.x,fx.y,fx.z,expand*0.12f,expand*0.12f,expand*0.72f,1.0f,0.42f,0.03f);
+    }
+    glDisable(GL_BLEND);
+}
+
 static void updateExplosions(float dt)
 {
     for(auto& ex:g_explosions){ ex.age+=dt; const float t=clampf(ex.age/std::max(ex.life,0.001f),0.0f,1.0f); ex.radius=0.8f+(ex.maxRadius-0.8f)*t; }
@@ -3376,7 +3793,15 @@ static void spawnPlayerRocket()
     if(g_world!=WORLD_OCEAN) return;
     const float oy=g_py+EYE_HEIGHT-0.15f; float dx=cosf(g_pitch)*sinf(g_yaw),dy=sinf(g_pitch),dz=-cosf(g_pitch)*cosf(g_yaw);
     const float len=sqrtf(dx*dx+dy*dy+dz*dz); if(len<0.001f) return; dx/=len;dy/=len;dz/=len;
-    Projectile p{}; p.x=g_px;p.y=oy;p.z=g_pz;p.dx=dx;p.dy=dy;p.dz=dz;p.speed=55.0f;p.damage=140.0f;p.active=true;p.playerRocket=true;p.radius=0.75f;p.explosionRadius=18.0f;g_projectiles.push_back(p);
+    Projectile p{};
+    // Start the rocket a little in front of the player and give it a short
+    // collision grace period.  This prevents a jetpack launch from immediately
+    // intersecting the player/nearby geometry while the muzzle is moving.
+    p.x=g_px + dx*1.35f; p.y=oy + dy*1.35f; p.z=g_pz + dz*1.35f;
+    p.dx=dx;p.dy=dy;p.dz=dz;p.speed=55.0f;p.damage=140.0f;p.active=true;
+    p.playerRocket=true;p.radius=0.75f;p.explosionRadius=18.0f;p.age=0.0f;
+    p.prevX=p.x; p.prevY=p.y; p.prevZ=p.z;
+    g_projectiles.push_back(p);
 }
 
 static void spawnEnemyProjectile(const Enemy& e)
@@ -3408,6 +3833,7 @@ static void spawnEnemyProjectile(const Enemy& e)
               e.type == ENEMY_FAST ? 28.0f : 22.0f;
     p.damage = e.damage;
     p.active = true;
+    p.prevX=p.x; p.prevY=p.y; p.prevZ=p.z;
     g_projectiles.push_back(p);
 }
 
@@ -3419,6 +3845,8 @@ static void updateEnemyProjectiles(float dt)
     {
         if (!p.active)
             continue;
+
+        p.prevX=p.x; p.prevY=p.y; p.prevZ=p.z;
 
         if (p.heavyRocket)
         {
@@ -3438,6 +3866,10 @@ static void updateEnemyProjectiles(float dt)
             }
         }
 
+        p.age += dt;
+        const float rocketPlayerDistance = distance3D(p.x,p.y,p.z,g_px,g_py+0.9f,g_pz);
+        const bool launchGrace = p.playerRocket && (p.age < 0.40f || rocketPlayerDistance < 4.5f);
+
         const float oldX = p.x;
         const float oldY = p.y;
         const float oldZ = p.z;
@@ -3447,7 +3879,7 @@ static void updateEnemyProjectiles(float dt)
         p.y += p.dy * step;
         p.z += p.dz * step;
 
-        if (p.playerRocket && g_world==WORLD_OCEAN)
+        if (p.playerRocket && g_world==WORLD_OCEAN && !launchGrace)
         {
             bool hitSub=false;
             for(auto& sub:g_oceanSubmarines)
@@ -3482,10 +3914,12 @@ static void updateEnemyProjectiles(float dt)
         const float floorY = currentFloorHeight(p.x,p.z);
         const float ceilingY = inTunnel
             ? tunnelRoofHeight(p.x,p.z)
-            : terrainHeight(p.x,p.z) + 80.0f;
-        if (p.x < -ARENA - 2.0f || p.x > ARENA + 2.0f ||
-            p.z < -ARENA - 2.0f || p.z > ARENA + 2.0f ||
-            p.y < floorY + 0.05f || p.y > ceilingY - 0.05f)
+            : (g_world == WORLD_OCEAN ? 2200.0f
+                                       : terrainHeight(p.x,p.z) + 120.0f);
+        if (!launchGrace &&
+            (p.x < -ARENA - 2.0f || p.x > ARENA + 2.0f ||
+             p.z < -ARENA - 2.0f || p.z > ARENA + 2.0f ||
+             p.y < floorY + 0.05f || p.y > ceilingY - 0.05f))
         {
             if(p.heavyRocket || p.playerRocket)
                 spawnExplosion(p.x,p.y,p.z,p.explosionRadius>0.0f?p.explosionRadius:10.0f,p.damage*0.70f,p.heavyRocket,false);
@@ -3498,7 +3932,7 @@ static void updateEnemyProjectiles(float dt)
         const float segLen = sqrtf(vx*vx + vy*vy + vz*vz);
         bool blocked = false;
 
-        if (segLen > 0.0001f && !p.heavyRocket)
+        if (segLen > 0.0001f && !p.heavyRocket && !launchGrace)
         {
             for (const auto& o : g_objects)
             {
@@ -3520,7 +3954,7 @@ static void updateEnemyProjectiles(float dt)
             }
         }
 
-        if (!p.heavyRocket && !blocked && segLen > 0.0001f)
+        if (!p.heavyRocket && !blocked && !launchGrace && segLen > 0.0001f)
         {
             for (const auto& wo : g_otherWorldObjects)
             {
@@ -3535,7 +3969,7 @@ static void updateEnemyProjectiles(float dt)
             }
         }
 
-        if (!p.heavyRocket && !blocked && tunnelWallHitSegment(oldX,oldY,oldZ,p.x,p.y,p.z))
+        if (!p.heavyRocket && !blocked && !launchGrace && tunnelWallHitSegment(oldX,oldY,oldZ,p.x,p.y,p.z))
             blocked = true;
 
         if (blocked)
@@ -3625,7 +4059,7 @@ static void updateEnemies(float dt)
         // Enemy models face local -Z, so this is the yaw that points -Z
         // directly from the enemy toward the player.
         const float desiredYaw = atan2f(g_px - e.x, e.z - g_pz);
-        const float turnRate = (e.type == ENEMY_TANK ? 2.5f : 5.5f);
+        const float turnRate = (e.type == ENEMY_TANK ? 0.95f : 5.5f);
         e.yaw = turnToward(e.yaw, desiredYaw, turnRate * dt);
 
         updateOtherWorldEnemyBehavior(e, dt);
@@ -3650,8 +4084,8 @@ static void updateEnemies(float dt)
                 const float step=e.speed*dt;
                 const float nx=e.x+ddx*inv*step;
                 const float nz=e.z+ddz*inv*step;
-                if(isTunnelZone(nx,e.z)) e.x=nx;
-                if(isTunnelZone(e.x,nz)) e.z=nz;
+                if(tunnelCorridorContains(nx,e.z,e.radius)) e.x=nx;
+                if(tunnelCorridorContains(e.x,nz,e.radius)) e.z=nz;
             }
             e.y=clampf(e.y+(targetY-e.y)*clampf(dt*3.0f,0.0f,1.0f),
                        tunnelFloorHeight(e.x,e.z)+1.1f,
@@ -3769,7 +4203,7 @@ static void updatePickups()
         }
         else if (o.type == OBJECT_AMMO)
         {
-            for (int i = 0; i < 3; ++i)
+            for (int i = 0; i < 4; ++i)
             {
                 g_weapons[i].reserve +=
                     i == WEAPON_SHOTGUN ?
@@ -3822,6 +4256,16 @@ static void updateGame(float dt)
 
         if (g_hitMarker < 0.0f)
             g_hitMarker = 0.0f;
+    }
+
+    if (g_messageTimer > 0.0f)
+    {
+        g_messageTimer -= dt;
+        if (g_messageTimer <= 0.0f)
+        {
+            g_messageTimer = 0.0f;
+            g_message.clear();
+        }
     }
 
     if (g_muzzleFlash > 0.0f)
@@ -3889,12 +4333,23 @@ static void updateGame(float dt)
     prevF = keyF;
 
     updateJetpack(dt);
+
+    // E is the only way to enter or leave tunnel gates.
+    static bool prevTunnelE = false;
+    const bool tunnelE = glfwGetKey(g_window, GLFW_KEY_E) == GLFW_PRESS;
+    if (tunnelE && !prevTunnelE)
+        tryUseTunnelGate();
+    prevTunnelE = tunnelE;
+
     updatePlayer(dt);
     updateWorldPortals();
     updateOceanSubmarines(dt);
+    updateSubmarineDeathEffects(dt);
+    updateTankDeathEffects(dt);
 
     updateEnemies(dt);
     updateEnemyProjectiles(dt);
+    updateDeadEnemyEffects(dt);
     updateExplosions(dt);
 
     updatePickups();
@@ -3908,36 +4363,15 @@ static void updateGame(float dt)
         shoot();
     }
 
-    // weapon switching
-    if (glfwGetKey(
-            g_window,
-            GLFW_KEY_1)
-        == GLFW_PRESS)
-    {
-        switchWeapon(
-            WEAPON_PISTOL
-        );
-    }
-
-    if (glfwGetKey(
-            g_window,
-            GLFW_KEY_2)
-        == GLFW_PRESS)
-    {
-        switchWeapon(
-            WEAPON_RIFLE
-        );
-    }
-
-    if (glfwGetKey(
-            g_window,
-            GLFW_KEY_3)
-        == GLFW_PRESS)
-    {
-        switchWeapon(
-            WEAPON_SHOTGUN
-        );
-    }
+    // Weapon switching is edge-triggered and never changes world/position.
+    static bool prev1=false, prev2=false, prev3=false;
+    const bool key1=glfwGetKey(g_window,GLFW_KEY_1)==GLFW_PRESS;
+    const bool key2=glfwGetKey(g_window,GLFW_KEY_2)==GLFW_PRESS;
+    const bool key3=glfwGetKey(g_window,GLFW_KEY_3)==GLFW_PRESS;
+    if (key1 && !prev1) switchWeapon(WEAPON_PISTOL);
+    if (key2 && !prev2) switchWeapon(WEAPON_RIFLE);
+    if (key3 && !prev3) switchWeapon(WEAPON_SHOTGUN);
+    prev1=key1; prev2=key2; prev3=key3;
 
     // Rocket launcher: key 4, available only in the ocean world.
     static bool prev4 = false;
@@ -3981,6 +4415,89 @@ static void drawSky()
     glDisable(GL_CULL_FACE);
     glDepthMask(GL_FALSE);
 
+    if (g_world == WORLD_OCEAN)
+    {
+        // World-fixed ocean sky. The dome is centered on the player only to
+        // avoid floating-point precision loss; its orientation is never tied
+        // to the camera. The sun is a spherical/billboarded disc that actually
+        // crosses the horizon and keeps its orientation toward the camera.
+        const float radius = 7000.0f;
+        const float day = terrainDayFactor();
+        const float phase = fmodf(g_gameTime, DAY_NIGHT_CYCLE) / DAY_NIGHT_CYCLE;
+        const float sunAngle = phase * 2.0f * (float)M_PI - 0.5f * (float)M_PI;
+
+        glDisable(GL_TEXTURE_2D);
+        glMatrixMode(GL_MODELVIEW);
+        glPushMatrix();
+        glTranslatef(g_px, g_py + EYE_HEIGHT, g_pz);
+
+        const int bands=22, slices=72;
+        for(int b=0;b<bands;++b)
+        {
+            const float y0=-1.0f + 2.0f*(float)b/(float)bands;
+            const float y1=-1.0f + 2.0f*(float)(b+1)/(float)bands;
+            const float r0=sqrtf(std::max(0.0f,1.0f-y0*y0));
+            const float r1=sqrtf(std::max(0.0f,1.0f-y1*y1));
+            const float skyMix=(float)b/(float)(bands-1);
+            const float horizon=0.12f + 0.22f*skyMix;
+            glColor3f(0.015f + 0.03f*day + 0.05f*skyMix*day,
+                      0.045f + 0.18f*skyMix*day + horizon*day,
+                      0.09f + 0.40f*skyMix*day + 0.08f*day);
+            glBegin(GL_QUADS);
+            for(int i=0;i<slices;++i)
+            {
+                const float a0=2.0f*(float)M_PI*i/slices, a1=2.0f*(float)M_PI*(i+1)/slices;
+                glVertex3f(cosf(a0)*r0*radius,y0*radius,sinf(a0)*r0*radius);
+                glVertex3f(cosf(a1)*r0*radius,y0*radius,sinf(a1)*r0*radius);
+                glVertex3f(cosf(a1)*r1*radius,y1*radius,sinf(a1)*r1*radius);
+                glVertex3f(cosf(a0)*r1*radius,y1*radius,sinf(a0)*r1*radius);
+            }
+            glEnd();
+        }
+
+        const float sunYNorm=sinf(sunAngle);
+        if (sunYNorm > -0.06f)
+        {
+            const float dist=5600.0f;
+            // The azimuth and elevation are world-space values; only the
+            // billboard rotation below follows the camera.
+            const float sx=cosf(sunAngle)*dist;
+            const float sy=sunYNorm*dist*0.72f + 1250.0f;
+            const float szz=sinf(sunAngle)*dist;
+            const float sr=125.0f;
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+            glPushMatrix();
+            glTranslatef(sx,sy,szz);
+            glRotatef(-g_yaw*180.0f/(float)M_PI,0,1,0);
+            glRotatef(g_pitch*180.0f/(float)M_PI,1,0,0);
+            for(int ring=3;ring>=1;--ring)
+            {
+                const float rr=sr*(1.0f+0.55f*ring);
+                glColor4f(1.0f,0.70f+0.08f*ring,0.22f,0.025f+0.012f*ring);
+                glBegin(GL_QUADS);
+                glVertex3f(-rr,-rr,0); glVertex3f(rr,-rr,0); glVertex3f(rr,rr,0); glVertex3f(-rr,rr,0);
+                glEnd();
+            }
+            glColor4f(1.0f,0.94f,0.62f,0.98f);
+            glBegin(GL_TRIANGLE_FAN);
+            glVertex3f(0,0,0);
+            for(int i=0;i<=32;++i)
+            {
+                const float a=2.0f*(float)M_PI*i/32.0f;
+                glVertex3f(cosf(a)*sr,sinf(a)*sr,0);
+            }
+            glEnd();
+            glDisable(GL_BLEND);
+            glPopMatrix();
+        }
+        glPopMatrix();
+        glDepthMask(GL_TRUE);
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_FOG);
+        return;
+    }
+
     if (g_earthSkyTexture)
     {
         glEnable(GL_TEXTURE_2D);
@@ -3997,7 +4514,7 @@ static void drawSky()
         glPushMatrix();
         glTranslatef(g_px, g_py + EYE_HEIGHT, g_pz);
 
-        const float radius = 2200.0f;
+        const float radius = 7000.0f;
         const int lon = 64;
         const int lat = 20;
 
@@ -4034,50 +4551,79 @@ static void drawSky()
         glBindTexture(GL_TEXTURE_2D, 0);
         glDisable(GL_TEXTURE_2D);
     }
-
-    // A distant, world-fixed sun.  Its position is not derived from g_px/g_pz,
-    // so walking does not make the sun follow the player.
-    const float phase = fmodf(g_gameTime, DAY_NIGHT_CYCLE) / DAY_NIGHT_CYCLE;
-    const float az = phase * 2.0f * (float)M_PI - 0.65f * (float)M_PI;
-    const float elevation = 0.12f + 0.78f * sinf(az);
-    if (elevation > 0.025f)
+    else
     {
-        const float ce = cosf(0.82f * az);
-        const float se = sinf(0.82f * az);
-        const float sy = clampf(elevation, 0.04f, 0.90f);
-        const float horiz = sqrtf(std::max(0.001f, 1.0f - sy * sy));
-        const float sx = cosf(az) * horiz;
-        const float sz = sinf(az) * horiz;
+        // If the optional BMP panorama cannot be loaded, keep a fully visible
+        // procedural sky instead of leaving the daytime world without a sky.
+        const float day = terrainDayFactor();
+        const float radius = 7000.0f;
+        glDisable(GL_TEXTURE_2D);
+        glMatrixMode(GL_MODELVIEW);
+        glPushMatrix();
+        glTranslatef(g_px, g_py + EYE_HEIGHT, g_pz);
+        const int bands = 22, slices = 72;
+        for (int b=0; b<bands; ++b)
+        {
+            const float y0=-1.0f+2.0f*(float)b/(float)bands;
+            const float y1=-1.0f+2.0f*(float)(b+1)/(float)bands;
+            const float r0=sqrtf(std::max(0.0f,1.0f-y0*y0));
+            const float r1=sqrtf(std::max(0.0f,1.0f-y1*y1));
+            const float m=(float)b/(float)(bands-1);
+            glColor3f(0.015f+0.08f*m*day,0.035f+0.32f*m*day,0.08f+0.70f*m*day);
+            glBegin(GL_QUADS);
+            for (int i=0;i<slices;++i)
+            {
+                const float a0=2.0f*(float)M_PI*i/slices;
+                const float a1=2.0f*(float)M_PI*(i+1)/slices;
+                glVertex3f(cosf(a0)*r0*radius,y0*radius,sinf(a0)*r0*radius);
+                glVertex3f(cosf(a1)*r0*radius,y0*radius,sinf(a1)*r0*radius);
+                glVertex3f(cosf(a1)*r1*radius,y1*radius,sinf(a1)*r1*radius);
+                glVertex3f(cosf(a0)*r1*radius,y1*radius,sinf(a0)*r1*radius);
+            }
+            glEnd();
+        }
+        glPopMatrix();
+    }
 
-        const float dist = 5000.0f;
-        const float cx = sx * dist;
-        const float cy = sy * dist;
-        const float cz = sz * dist;
-        const float sr = 38.0f + 8.0f * sinf(phase * 2.0f * (float)M_PI);
+    // A distant, world-fixed sun. It travels above and below the horizon;
+    // only the daytime portion is drawn. The billboard orientation follows
+    // the camera while the world-space position does not.
+    const float phase = fmodf(g_gameTime, DAY_NIGHT_CYCLE) / DAY_NIGHT_CYCLE;
+    const float sunAngle = phase * 2.0f * (float)M_PI - 0.5f * (float)M_PI;
+    const float sunHeight = sinf(sunAngle);
+    if (sunHeight > -0.035f)
+    {
+        const float dist = 7200.0f;
+        const float sx = cosf(sunAngle) * dist;
+        const float sy = sunHeight * 4200.0f + 1600.0f;
+        const float sz = sinf(sunAngle) * dist;
+        const float sr = 95.0f;
 
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        for (int ring = 2; ring >= 1; --ring)
+        glPushMatrix();
+        glTranslatef(sx, sy, sz);
+        glRotatef(-g_yaw * 180.0f / (float)M_PI, 0.0f, 1.0f, 0.0f);
+        glRotatef(g_pitch * 180.0f / (float)M_PI, 1.0f, 0.0f, 0.0f);
+        for (int ring = 3; ring >= 1; --ring)
         {
-            const float rr = sr * (1.0f + ring * 0.75f);
-            glColor4f(1.0f, 0.86f, 0.42f, 0.018f + 0.008f * terrainDayFactor());
+            const float rr = sr * (1.0f + ring * 0.55f);
+            glColor4f(1.0f, 0.80f, 0.30f, 0.018f + 0.012f * ring);
             glBegin(GL_QUADS);
-            glVertex3f(cx - rr, cy - rr, cz);
-            glVertex3f(cx + rr, cy - rr, cz);
-            glVertex3f(cx + rr, cy + rr, cz);
-            glVertex3f(cx - rr, cy + rr, cz);
+            glVertex3f(-rr,-rr,0); glVertex3f(rr,-rr,0); glVertex3f(rr,rr,0); glVertex3f(-rr,rr,0);
             glEnd();
         }
-        glColor4f(1.0f, 0.95f, 0.72f, 0.96f);
-        glBegin(GL_QUADS);
-        glVertex3f(cx - sr, cy - sr, cz);
-        glVertex3f(cx + sr, cy - sr, cz);
-        glVertex3f(cx + sr, cy + sr, cz);
-        glVertex3f(cx - sr, cy + sr, cz);
+        glColor4f(1.0f, 0.96f, 0.72f, 0.98f);
+        glBegin(GL_TRIANGLE_FAN);
+        glVertex3f(0,0,0);
+        for (int i=0;i<=40;++i)
+        {
+            const float a=2.0f*(float)M_PI*i/40.0f;
+            glVertex3f(cosf(a)*sr,sinf(a)*sr,0);
+        }
         glEnd();
+        glPopMatrix();
         glDisable(GL_BLEND);
-        (void)ce;
-        (void)se;
     }
 
     glDepthMask(GL_TRUE);
@@ -4289,7 +4835,7 @@ static bool portalDestinationClear(int world, float x, float z, float radius)
     for (const auto& o : g_objects)
     {
         if (!o.active || o.world != world) continue;
-        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT || o.type == OBJECT_HOUSE_MODEL) continue;
+        if (o.type == OBJECT_AMMO || o.type == OBJECT_ROCKET_AMMO || o.type == OBJECT_MEDKIT) continue;
         const float hx = o.sx * 0.5f + radius;
         const float hz = o.sz * 0.5f + radius;
         if (fabsf(x - o.x) <= hx && fabsf(z - o.z) <= hz)
@@ -4574,6 +5120,147 @@ static void addSkyscraper(float x, float z, float w, float d, float h)
     // A single, conservative AABB is used for physics, so enemies and the
     // player never get snagged by decorative ledges or window geometry.
     g_objects.push_back({OBJECT_SKYSCRAPER,x,y,z,w,h,d,true});
+}
+
+// ============================================================
+// USER WTC / WORLD TRADE CENTER MODEL
+// ============================================================
+struct WtcModelVertex { float x,y,z; int material; };
+static std::vector<WtcModelVertex> g_wtcTriangles;
+static bool g_wtcReady=false;
+static constexpr float WTC_MODEL_MIN_X=-202.45f;
+static constexpr float WTC_MODEL_MAX_X=152.40f;
+static constexpr float WTC_MODEL_MIN_Y=0.0f;
+static constexpr float WTC_MODEL_MAX_Y=540.6864f;
+static constexpr float WTC_MODEL_MIN_Z=-207.88f;
+static constexpr float WTC_MODEL_MAX_Z=167.88f;
+
+static int wtcMaterialId(const std::string& name)
+{
+    if (name.find("nightwindows") != std::string::npos) return 1;
+    if (name.find("redlight") != std::string::npos) return 2;
+    if (name.find("roof") != std::string::npos) return 3;
+    if (name.find("smBLDG") != std::string::npos) return 4;
+    if (name.find("towersrf") != std::string::npos) return 5;
+    if (name.find("sidewalk") != std::string::npos) return 6;
+    return 0;
+}
+
+static bool loadWtcOBJ(const char* path)
+{
+    std::ifstream file(path);
+    if (!file) return false;
+    std::vector<std::array<float,3>> pos;
+    std::string line;
+    int mat=0;
+    while (std::getline(file,line))
+    {
+        std::istringstream is(line);
+        std::string tag;
+        is >> tag;
+        if (tag=="v")
+        {
+            float x,y,z;
+            if (is>>x>>y>>z && std::isfinite(x) && std::isfinite(y) && std::isfinite(z)) pos.push_back({x,y,z});
+        }
+        else if (tag=="usemtl")
+        {
+            std::string n; is>>n;
+            mat=wtcMaterialId(n);
+        }
+        else if (tag=="f")
+        {
+            std::vector<std::string> refs;
+            std::string r;
+            while (is>>r) refs.push_back(r);
+            for (size_t k=1;k+1<refs.size();++k)
+            {
+                const std::string refs3[3]={refs[0],refs[k],refs[k+1]};
+                for (const std::string& q:refs3)
+                {
+                    const size_t slash=q.find('/');
+                    int vi=std::atoi((slash==std::string::npos?q:q.substr(0,slash)).c_str());
+                    if (vi<0) vi=(int)pos.size()+vi+1;
+                    if (vi<=0 || vi>(int)pos.size()) continue;
+                    const auto v=pos[(size_t)vi-1];
+                    g_wtcTriangles.push_back({v[0],v[1],v[2],mat});
+                }
+            }
+        }
+    }
+    return !g_wtcTriangles.empty();
+}
+
+static void initWtcModel()
+{
+    g_wtcTriangles.clear();
+    if (!loadWtcOBJ("assets/wtc/wtc.obj") && !loadWtcOBJ("../assets/wtc/wtc.obj"))
+        return;
+    g_wtcReady=true;
+}
+
+static void destroyWtcModel()
+{
+    g_wtcTriangles.clear();
+    g_wtcReady=false;
+}
+
+static void drawWtcModel(float x,float baseY,float z,float yaw,float scale)
+{
+    if (!g_wtcReady || g_wtcTriangles.empty()) return;
+    const float cx=(WTC_MODEL_MIN_X+WTC_MODEL_MAX_X)*0.5f;
+    const float cz=(WTC_MODEL_MIN_Z+WTC_MODEL_MAX_Z)*0.5f;
+    glPushMatrix();
+    glTranslatef(x,baseY,z);
+    glRotatef(yaw*57.2958f,0,1,0);
+    glScalef(scale,scale,scale);
+    glTranslatef(-cx,-WTC_MODEL_MIN_Y,-cz);
+    glDisable(GL_TEXTURE_2D);
+    glBegin(GL_TRIANGLES);
+    int cur=-1;
+    for (const auto& v:g_wtcTriangles)
+    {
+        if (v.material!=cur)
+        {
+            cur=v.material;
+            switch(cur)
+            {
+                case 1: glColor3f(0.06f,0.12f,0.18f); break;
+                case 2: glColor3f(0.92f,0.08f,0.06f); break;
+                case 3: glColor3f(0.12f,0.15f,0.18f); break;
+                case 4: glColor3f(0.28f,0.31f,0.34f); break;
+                case 5: glColor3f(0.42f,0.46f,0.50f); break;
+                case 6: glColor3f(0.20f,0.22f,0.24f); break;
+                default: glColor3f(0.34f,0.38f,0.42f); break;
+            }
+        }
+        glVertex3f(v.x,v.y,v.z);
+    }
+    glEnd();
+    glEnable(GL_TEXTURE_2D);
+    glPopMatrix();
+}
+
+static void createWtcBuildings()
+{
+    // Two large landmark complexes are placed just outside the existing city
+    // ring.  Their AABBs are deliberately conservative so the complete model
+    // footprint is solid for the player, enemies and projectile ray tests.
+    const float scale=0.30f;
+    const float h=(WTC_MODEL_MAX_Y-WTC_MODEL_MIN_Y)*scale;
+    const float w=(WTC_MODEL_MAX_X-WTC_MODEL_MIN_X)*scale;
+    const float d=(WTC_MODEL_MAX_Z-WTC_MODEL_MIN_Z)*scale;
+    const float placements[][3]=
+    {
+        {CITY_CENTER_X+205.0f, CITY_CENTER_Z-5.0f, 0.0f},
+        {CITY_CENTER_X-205.0f, CITY_CENTER_Z+35.0f, 0.10f}
+    };
+    for (const auto& q:placements)
+    {
+        const float x=q[0], z=q[1], yaw=q[2];
+        const float y=terrainHeight(x,z)+h*0.5f;
+        g_objects.push_back({OBJECT_WTC_MODEL,x,y,z,w,h,d,true,WORLD_MAIN,yaw});
+    }
 }
 
 static void createCityBiome()
@@ -4984,6 +5671,7 @@ static void drawWorld()
 
         const float odx=o.x-g_px, odz=o.z-g_pz;
         const float objectRenderDistance =
+            (o.type == OBJECT_WTC_MODEL) ? 720.0f :
             (o.type == OBJECT_HOUSE_MODEL || o.type == OBJECT_HOUSE_ROOF || o.type == OBJECT_BUILDING)
                 ? 420.0f : OBJECT_RENDER_DISTANCE;
         if(odx*odx+odz*odz > objectRenderDistance*objectRenderDistance)
@@ -5000,6 +5688,24 @@ static void drawWorld()
         else if (o.type == OBJECT_SKYSCRAPER)
         {
             drawSkyscraper(o);
+        }
+        else if (o.type == OBJECT_WTC_MODEL)
+        {
+            const float wtcScale=o.sy/(WTC_MODEL_MAX_Y-WTC_MODEL_MIN_Y);
+            if (g_wtcReady)
+            {
+                const GLboolean fogWasEnabled = glIsEnabled(GL_FOG);
+                if (fogWasEnabled) glDisable(GL_FOG);
+                drawWtcModel(o.x, o.y-o.sy*0.5f, o.z, o.yaw, wtcScale);
+                if (fogWasEnabled) glEnable(GL_FOG);
+            }
+            else
+            {
+                const float base=o.y-o.sy*0.5f;
+                drawBox(o.x,base+o.sy*0.50f,o.z,o.sx*0.62f,o.sy*0.96f,o.sz*0.62f,0.38f,0.42f,0.46f);
+                drawBox(o.x-o.sx*0.12f,base+o.sy*0.70f,o.z,o.sx*0.14f,o.sy*0.60f,o.sz*0.14f,0.55f,0.58f,0.62f);
+                drawBox(o.x+o.sx*0.12f,base+o.sy*0.70f,o.z,o.sx*0.14f,o.sy*0.60f,o.sz*0.14f,0.55f,0.58f,0.62f);
+            }
         }
         else if (o.type == OBJECT_SOLID)
         {
@@ -5047,7 +5753,8 @@ static void createOceanSubmarines()
         sub.orbitRadius = 310.0f + 28.0f * (i % 2);
         sub.phase = a;
         sub.rocketCooldown = 1.2f + 0.55f * i;
-        sub.hp = 1600.0f;
+        // Three close rocket hits are enough to destroy a submarine.
+        sub.hp = 360.0f;
         sub.active = true;
         g_oceanSubmarines.push_back(sub);
     }
@@ -5074,6 +5781,7 @@ static void spawnOceanSubmarineRocket(const OceanSubmarine& s)
     p.heavyRocket = true;
     p.radius = 0.65f;
     p.explosionRadius = 11.0f;
+    p.prevX=p.x; p.prevY=p.y; p.prevZ=p.z;
     g_projectiles.push_back(p);
 }
 
@@ -5148,7 +5856,7 @@ static void drawOceanSubmarines()
         drawBox( 5.5f,-4.0f,5.0f,2.8f,2.0f,7.0f,0.12f,0.10f,0.09f);
         glPopMatrix();
 
-        const float hp=clampf(s.hp/1600.0f,0.0f,1.0f);
+        const float hp=clampf(s.hp/360.0f,0.0f,1.0f);
         glPushMatrix();
         glTranslatef(s.x,s.y+7.0f,s.z);
         glRotatef(-g_yaw*180.0f/(float)M_PI,0,1,0);
@@ -5184,9 +5892,21 @@ static void drawEnemyProjectiles()
         }
         else
         {
-            drawBox(p.x, p.y, p.z,
-                    0.12f, 0.12f, 0.12f,
-                    0.95f, 0.25f, 0.05f);
+            // Bright tracer + compact projectile core.  The tracer uses the
+            // previous position so fast bullets remain visible between frames.
+            glDisable(GL_TEXTURE_2D);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA,GL_ONE);
+            glLineWidth(2.2f);
+            glBegin(GL_LINES);
+            glColor4f(1.0f,0.72f,0.16f,0.85f);
+            glVertex3f(p.prevX,p.prevY,p.prevZ);
+            glColor4f(1.0f,0.95f,0.52f,0.10f);
+            glVertex3f(p.x,p.y,p.z);
+            glEnd();
+            glDisable(GL_BLEND);
+            glEnable(GL_TEXTURE_2D);
+            drawBox(p.x,p.y,p.z,0.10f,0.10f,0.18f,1.0f,0.55f,0.08f);
         }
     }
 }
@@ -5397,191 +6117,217 @@ static void drawEnemies()
 }
 
 // ============================================================
+// USER SUPPLIED WEAPON MODELS (OBJ)
+// ============================================================
+struct WeaponModelVertex { float x,y,z; int material; };
+struct WeaponModel { std::vector<WeaponModelVertex> triangles; float minX=0,maxX=0,minY=0,maxY=0,minZ=0,maxZ=0; bool ready=false; };
+static WeaponModel g_weaponModels[4];
+
+static int weaponMaterialId(const std::string& name)
+{
+    // Common material names used by the supplied weapon packs.
+    // Keep the RPG-7 visually distinct even though the fixed-pipeline
+    // loader intentionally does not depend on an external texture loader.
+    if (name.find("RPG_7_Rocket_M") != std::string::npos) return 4;
+    if (name.find("RPG_7_M") != std::string::npos) return 5;
+    if (name.find("Color_02") != std::string::npos) return 1;
+    if (name.find("Color_03") != std::string::npos) return 2;
+    if (name.find("Glass") != std::string::npos) return 3;
+    return 0;
+}
+
+static bool loadWeaponOBJ(WeaponModel& model, const char* path)
+{
+    model.triangles.clear();
+    model.ready=false;
+    std::ifstream file(path);
+    if (!file) return false;
+    std::vector<std::array<float,3>> pos;
+    std::string line;
+    int mat=0;
+    while (std::getline(file,line))
+    {
+        std::istringstream is(line);
+        std::string tag; is >> tag;
+        if (tag=="v")
+        {
+            float x,y,z;
+            if (is>>x>>y>>z && std::isfinite(x) && std::isfinite(y) && std::isfinite(z)) pos.push_back({x,y,z});
+        }
+        else if (tag=="usemtl")
+        {
+            std::string n; is>>n;
+            mat=weaponMaterialId(n);
+        }
+        else if (tag=="f")
+        {
+            std::vector<std::string> refs;
+            std::string r;
+            while (is>>r) refs.push_back(r);
+            for (size_t k=1;k+1<refs.size();++k)
+            {
+                const std::string tri[3]={refs[0],refs[k],refs[k+1]};
+                for (const std::string& q:tri)
+                {
+                    const size_t slash=q.find('/');
+                    int vi=std::atoi((slash==std::string::npos?q:q.substr(0,slash)).c_str());
+                    if (vi<0) vi=(int)pos.size()+vi+1;
+                    if (vi<=0 || vi>(int)pos.size()) continue;
+                    const auto v=pos[(size_t)vi-1];
+                    model.triangles.push_back({v[0],v[1],v[2],mat});
+                }
+            }
+        }
+    }
+    if (model.triangles.empty()) return false;
+    model.minX=model.maxX=model.triangles[0].x;
+    model.minY=model.maxY=model.triangles[0].y;
+    model.minZ=model.maxZ=model.triangles[0].z;
+    for (const auto& v:model.triangles)
+    {
+        model.minX=std::min(model.minX,v.x); model.maxX=std::max(model.maxX,v.x);
+        model.minY=std::min(model.minY,v.y); model.maxY=std::max(model.maxY,v.y);
+        model.minZ=std::min(model.minZ,v.z); model.maxZ=std::max(model.maxZ,v.z);
+    }
+    model.ready=true;
+    return true;
+}
+
+static void initWeaponModels()
+{
+    const char* files[3]={
+        "assets/weapons/Revolver/rovelver1.0.0.obj",
+        "assets/weapons/AK-74.obj",
+        "assets/weapons/doppietta.obj"
+    };
+    const char* alt[3]={
+        "../assets/weapons/Revolver/rovelver1.0.0.obj",
+        "../assets/weapons/AK-74.obj",
+        "../assets/weapons/doppietta.obj"
+    };
+    for (int i=0;i<3;++i)
+    {
+        if (!loadWeaponOBJ(g_weaponModels[i],files[i]))
+            loadWeaponOBJ(g_weaponModels[i],alt[i]);
+    }
+    // The supplied RPG-7 is a real OBJ model with two materials.  It is
+    // intentionally extracted into the game assets instead of being loaded
+    // from a RAR archive at runtime.  Its source mesh is authored in a much
+    // larger unit scale, so drawWeapon() applies a dedicated scale/rotation.
+    if (!loadWeaponOBJ(g_weaponModels[WEAPON_ROCKET],"assets/weapons/RPG7/RPG-7.obj"))
+        loadWeaponOBJ(g_weaponModels[WEAPON_ROCKET],"../assets/weapons/RPG7/RPG-7.obj");
+}
+
+static void destroyWeaponModels()
+{
+    for (auto& m:g_weaponModels) { m.triangles.clear(); m.ready=false; }
+}
+
+static void drawWeaponModel(const WeaponModel& m, float scale, float rollDeg, float pitchDeg, float yawDeg)
+{
+    if (!m.ready || m.triangles.empty()) return;
+    const float cx=(m.minX+m.maxX)*0.5f;
+    const float cy=(m.minY+m.maxY)*0.5f;
+    const float cz=(m.minZ+m.maxZ)*0.5f;
+    glPushMatrix();
+    glRotatef(yawDeg,0,1,0);
+    glRotatef(pitchDeg,1,0,0);
+    glRotatef(rollDeg,0,0,1);
+    glScalef(scale,scale,scale);
+    glTranslatef(-cx,-cy,-cz);
+    glDisable(GL_TEXTURE_2D);
+    glBegin(GL_TRIANGLES);
+    int cur=-1;
+    for (const auto& v:m.triangles)
+    {
+        if (!std::isfinite(v.x) || !std::isfinite(v.y) || !std::isfinite(v.z)) continue;
+        if (v.material!=cur)
+        {
+            cur=v.material;
+            switch(cur)
+            {
+                case 1: glColor3f(0.16f,0.17f,0.19f); break;
+                case 2: glColor3f(0.035f,0.04f,0.045f); break;
+                case 3: glColor4f(0.42f,0.58f,0.66f,0.65f); break;
+                case 4: glColor3f(0.42f,0.45f,0.39f); break; // RPG-7 rocket body
+                case 5: glColor3f(0.075f,0.085f,0.065f); break; // RPG-7 launcher
+                default: glColor3f(0.055f,0.06f,0.07f); break;
+            }
+        }
+        glVertex3f(v.x,v.y,v.z);
+    }
+    glEnd();
+    glEnable(GL_TEXTURE_2D);
+    glPopMatrix();
+}
+
+// ============================================================
 // DRAW WEAPON
 // ============================================================
 
 static void drawWeapon()
 {
-    int w =
-        g_currentWeapon;
-
-    float recoil =
-        g_weaponRecoil;
-
-    float x =
-        0.22f;
-
-    float y =
-        -0.35f + recoil * 0.08f;
-
-    float z =
-        -0.70f;
+    const int w=g_currentWeapon;
+    const float recoil=g_weaponRecoil;
+    const float x=(w==WEAPON_ROCKET ? 0.38f : 0.22f);
+    const float y=(w==WEAPON_ROCKET ? -0.25f : -0.35f) + recoil*0.08f;
+    const float z=(w==WEAPON_ROCKET ? -1.02f : -0.70f);
 
     glPushMatrix();
+    glTranslatef(x,y,z);
+    glRotatef(-5.0f,0.0f,1.0f,0.0f);
 
-    glTranslatef(
-        x,
-        y,
-        z
-    );
-
-    glRotatef(
-        -5.0f,
-        0.0f,
-        1.0f,
-        0.0f
-    );
-
-    if (w == WEAPON_PISTOL)
+    if (w==WEAPON_PISTOL && g_weaponModels[WEAPON_PISTOL].ready)
     {
-        drawBox(
-            0.0f,
-            0.0f,
-            0.0f,
-            0.25f,
-            0.20f,
-            0.75f,
-            0.10f,
-            0.11f,
-            0.13f
-        );
-
-        drawBox(
-            0.0f,
-            -0.25f,
-            0.15f,
-            0.18f,
-            0.55f,
-            0.22f,
-            0.08f,
-            0.08f,
-            0.10f
-        );
+        drawWeaponModel(g_weaponModels[WEAPON_PISTOL],0.28f,0.0f,0.0f,90.0f);
     }
-    else if (w == WEAPON_RIFLE)
+    else if (w==WEAPON_RIFLE && g_weaponModels[WEAPON_RIFLE].ready)
     {
-        drawBox(
-            0.0f,
-            0.0f,
-            0.0f,
-            0.24f,
-            0.25f,
-            1.25f,
-            0.08f,
-            0.09f,
-            0.10f
-        );
-
-        drawBox(
-            0.0f,
-            -0.25f,
-            0.15f,
-            0.20f,
-            0.65f,
-            0.25f,
-            0.07f,
-            0.07f,
-            0.08f
-        );
-
-        drawBox(
-            0.0f,
-            0.05f,
-            -0.75f,
-            0.12f,
-            0.12f,
-            0.70f,
-            0.12f,
-            0.13f,
-            0.15f
-        );
+        drawWeaponModel(g_weaponModels[WEAPON_RIFLE],1.65f,0.0f,0.0f,180.0f);
     }
-    else if (w == WEAPON_SHOTGUN)
+    else if (w==WEAPON_SHOTGUN && g_weaponModels[WEAPON_SHOTGUN].ready)
     {
-        drawBox(
-            0.0f,
-            0.0f,
-            0.0f,
-            0.38f,
-            0.30f,
-            1.05f,
-            0.12f,
-            0.12f,
-            0.13f
-        );
-
-        drawBox(
-            0.0f,
-            -0.25f,
-            0.15f,
-            0.26f,
-            0.65f,
-            0.28f,
-            0.08f,
-            0.08f,
-            0.09f
-        );
-
-        drawBox(
-            -0.10f,
-            0.03f,
-            -0.62f,
-            0.10f,
-            0.10f,
-            0.65f,
-            0.10f,
-            0.10f,
-            0.11f
-        );
-
-        drawBox(
-            0.10f,
-            0.03f,
-            -0.62f,
-            0.10f,
-            0.10f,
-            0.65f,
-            0.10f,
-            0.10f,
-            0.11f
-        );
+        drawWeaponModel(g_weaponModels[WEAPON_SHOTGUN],0.28f,0.0f,0.0f,0.0f);
     }
-    else if (w == WEAPON_ROCKET)
+    else if (w==WEAPON_ROCKET && g_weaponModels[WEAPON_ROCKET].ready)
+    {
+        // RPG-7 source mesh is ~471 units long along X. Rotate its long axis
+        // into the view direction and convert the source units to game units.
+        drawWeaponModel(g_weaponModels[WEAPON_ROCKET],0.0100f,0.0f,0.0f,90.0f);
+    }
+    else if (w==WEAPON_PISTOL)
+    {
+        drawBox(0,0,0,0.25f,0.20f,0.75f,0.10f,0.11f,0.13f);
+        drawBox(0,-0.25f,0.15f,0.18f,0.55f,0.22f,0.08f,0.08f,0.10f);
+    }
+    else if (w==WEAPON_RIFLE)
+    {
+        drawBox(0,0,0,0.24f,0.25f,1.25f,0.08f,0.09f,0.10f);
+        drawBox(0,-0.25f,0.15f,0.20f,0.65f,0.25f,0.07f,0.07f,0.08f);
+        drawBox(0,0.05f,-0.75f,0.12f,0.12f,0.70f,0.12f,0.13f,0.15f);
+    }
+    else if (w==WEAPON_SHOTGUN)
+    {
+        drawBox(0,0,0,0.38f,0.30f,1.05f,0.12f,0.12f,0.13f);
+        drawBox(0,-0.25f,0.15f,0.26f,0.65f,0.28f,0.08f,0.08f,0.09f);
+        drawBox(-0.10f,0.03f,-0.62f,0.10f,0.10f,0.65f,0.10f,0.10f,0.11f);
+        drawBox(0.10f,0.03f,-0.62f,0.10f,0.10f,0.65f,0.10f,0.10f,0.11f);
+    }
+    else
     {
         drawBox(0,0,0,0.58f,0.48f,1.45f,0.10f,0.11f,0.12f);
         drawBox(0,-0.30f,0.18f,0.32f,0.72f,0.35f,0.07f,0.07f,0.08f);
         drawBox(0,0.03f,-1.02f,0.18f,0.18f,0.85f,0.14f,0.15f,0.16f);
         drawBox(0,0.16f,-1.45f,0.38f,0.38f,0.28f,0.16f,0.17f,0.19f);
     }
-
     glPopMatrix();
 
-    // muzzle flash
-    if (g_muzzleFlash > 0.0f)
+    if (g_muzzleFlash>0.0f)
     {
         glPushMatrix();
-
-        glTranslatef(
-            0.22f,
-            -0.27f,
-            -1.35f
-        );
-
-        float s =
-            0.20f * g_muzzleFlash;
-
-        drawBox(
-            0.0f,
-            0.0f,
-            0.0f,
-            s,
-            s,
-            s,
-            1.0f,
-            0.75f,
-            0.10f
-        );
-
+        glTranslatef(0.22f,-0.27f,-1.35f);
+        const float s=0.20f*g_muzzleFlash;
+        drawBox(0,0,0,s,s,s,1.0f,0.75f,0.10f);
         glPopMatrix();
     }
 }
@@ -6134,6 +6880,20 @@ static void drawRadar(int W, int H)
     glMatrixMode(GL_MODELVIEW);
 }
 
+static std::string getSystemClockText()
+{
+    std::time_t now=std::time(nullptr);
+    std::tm local{};
+#ifdef _WIN32
+    localtime_s(&local,&now);
+#else
+    local= *std::localtime(&now);
+#endif
+    char buf[32]{};
+    std::strftime(buf,sizeof(buf),"%H:%M:%S",&local);
+    return std::string(buf);
+}
+
 static void drawHUD(
     int W,
     int H)
@@ -6161,6 +6921,11 @@ static void drawHUD(
 
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_FOG);
+
+    // Real system clock (local Windows time), independent of game time.
+    const std::string clockText = getSystemClockText();
+    glColor3f(0.90f,0.95f,1.0f);
+    drawText(clockText, 22.0f, H-34.0f, 2.0f, 0.08f);
 
     // crosshair
     float cx =
@@ -6213,6 +6978,20 @@ static void drawHUD(
         rect(panelX,panelY,panelX+4.0f,panelY+38.0f);
         glColor3f(0.86f,0.94f,1.0f);
         drawText(g_message,panelX+14.0f,panelY+10.0f,2.2f,0.12f);
+    }
+
+    // Contextual tunnel-gate hint. Entry/exit itself still requires E.
+    if (g_world == WORLD_MAIN)
+    {
+        int gateSeg=-1; bool gateStart=false; float gateDist=0.0f;
+        float gateDirX=0.0f, gateDirZ=0.0f;
+        if (nearestPortal(g_px,g_pz,gateSeg,gateStart,gateDist,gateDirX,gateDirZ) &&
+            gateDist <= g_tunnels[gateSeg].halfWidth + 3.0f)
+        {
+            glColor3f(1.0f,0.82f,0.24f);
+            drawText(g_inTunnel ? "E: ВЫЙТИ ИЗ ТУННЕЛЯ" : "E: ВОЙТИ В ТУННЕЛЬ",
+                     W*0.5f-112.0f, H-94.0f, 1.8f, 0.10f);
+        }
     }
 
     // health background
@@ -6433,6 +7212,8 @@ static bool g_prevEnter = false;
 static bool g_prevUp = false;
 static bool g_prevDown = false;
 static bool g_prevF11 = false;
+static bool g_prevLeft = false;
+static bool g_prevRight = false;
 
 static void loadDisplaySettings()
 {
@@ -6446,6 +7227,9 @@ static void loadDisplaySettings()
         if (g_displaySettings.height < 600 || g_displaySettings.height > 4320)
             g_displaySettings.height = 720;
         g_displaySettings.fullscreen = (fs != 0);
+        int savedVolume = g_musicVolume;
+        if (in >> savedVolume)
+            g_musicVolume = std::max(0, std::min(100, savedVolume));
     }
 }
 
@@ -6454,7 +7238,7 @@ static void saveDisplaySettings()
     std::ofstream out("settings.cfg", std::ios::trunc);
     if (out)
         out << g_displaySettings.width << ' ' << g_displaySettings.height << ' '
-            << (g_displaySettings.fullscreen ? 1 : 0) << '\n';
+            << (g_displaySettings.fullscreen ? 1 : 0) << ' ' << g_musicVolume << '\n';
 }
 
 static GLFWmonitor* getPrimaryMonitor()
@@ -6538,7 +7322,7 @@ static void drawStartMenu(int W, int H)
     glEnd();
 
     const float panelW = std::min(720.0f, W * 0.78f);
-    const float panelH = std::min(560.0f, H * 0.78f);
+    const float panelH = std::min(620.0f, H * 0.84f);
     const float left = W * 0.5f - panelW * 0.5f;
     const float bottom = H * 0.5f - panelH * 0.5f;
 
@@ -6564,15 +7348,20 @@ static void drawStartMenu(int W, int H)
     glVertex2f(left+24.0f, titleY+44.0f);
     glEnd();
     glColor3f(0.98f,0.98f,1.0f);
-    drawCenteredMenuText("ШУТЕР", W * 0.5f, titleY);
+    drawCenteredMenuText(g_pauseMenu ? "ПАУЗА" : "ШУТЕР", W * 0.5f, titleY);
 
     const float buttonW = panelW - 150.0f;
     const float buttonX = left + 75.0f;
     const float buttonH = 56.0f;
     const float firstY = bottom + panelH - 205.0f;
-    const float gap = 86.0f;
-    const char* items[3] = { "ИГРАТЬ", "ПОЛНЫЙ ЭКРАН", "ВЫХОД" };
-    for (int i=0;i<3;++i)
+    const float gap = 70.0f;
+    const char* items[4] = {
+        g_pauseMenu ? "ПРОДОЛЖИТЬ" : "ИГРАТЬ",
+        "ПОЛНЫЙ ЭКРАН",
+        "ГРОМКОСТЬ МУЗЫКИ",
+        g_pauseMenu ? "В ГЛАВНОЕ МЕНЮ" : "ВЫХОД"
+    };
+    for (int i=0;i<4;++i)
     {
         const float y = firstY - i*gap;
         if (i == g_menuSelection)
@@ -6588,6 +7377,23 @@ static void drawStartMenu(int W, int H)
                   i == g_menuSelection ? 0.99f : 0.78f,
                   i == g_menuSelection ? 1.00f : 0.86f);
         drawCenteredMenuText(items[i], W * 0.5f, y + 16.0f);
+        if (i == 2)
+        {
+            const float barW = buttonW - 250.0f;
+            const float barX = buttonX + 105.0f;
+            const float barY = y + 8.0f;
+            glColor3f(0.025f,0.035f,0.05f);
+            glBegin(GL_QUADS);
+            glVertex2f(barX,barY); glVertex2f(barX+barW,barY);
+            glVertex2f(barX+barW,barY+10.0f); glVertex2f(barX,barY+10.0f);
+            glEnd();
+            glColor3f(0.18f,0.62f,0.90f);
+            glBegin(GL_QUADS);
+            glVertex2f(barX,barY); glVertex2f(barX+barW*(g_musicVolume/100.0f),barY);
+            glVertex2f(barX+barW*(g_musicVolume/100.0f),barY+10.0f); glVertex2f(barX,barY+10.0f);
+            glEnd();
+            drawText(std::to_string(g_musicVolume) + "%", buttonX+buttonW-92.0f, y+30.0f, 1.0f, 0.0f);
+        }
     }
 
     // Status/help is placed in a dedicated footer, far below the buttons.
@@ -6606,13 +7412,41 @@ static void drawStartMenu(int W, int H)
 
 static void activateMenuSelection(GLFWwindow* window)
 {
+    if (g_pauseMenu)
+    {
+        if (g_menuSelection == 0)
+        {
+            g_pauseMenu=false;
+            g_inStartMenu=false;
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            g_firstMouse=true;
+            if (glfwRawMouseMotionSupported())
+                glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+        }
+        else if (g_menuSelection == 1)
+        {
+            setFullscreenMode(window, !g_displaySettings.fullscreen);
+        }
+        else if (g_menuSelection == 2)
+        {
+            // Volume is adjusted with Left/Right while this row is selected.
+        }
+        else
+        {
+            g_pauseMenu=false;
+            g_inStartMenu=true;
+            g_menuSelection=0;
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        }
+        return;
+    }
+
     if (g_menuSelection == 0)
     {
-        // Enter gameplay exactly once. Keeping this path identical for keyboard
-        // and mouse prevents the menu from getting stuck after a click.
-        g_inStartMenu = false;
+        g_inStartMenu=false;
+        g_pauseMenu=false;
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-        g_firstMouse = true;
+        g_firstMouse=true;
         if (glfwRawMouseMotionSupported())
             glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
         resetGame();
@@ -6620,6 +7454,10 @@ static void activateMenuSelection(GLFWwindow* window)
     else if (g_menuSelection == 1)
     {
         setFullscreenMode(window, !g_displaySettings.fullscreen);
+    }
+    else if (g_menuSelection == 2)
+    {
+        // Volume is adjusted with Left/Right while this row is selected.
     }
     else
     {
@@ -6633,10 +7471,16 @@ static void updateStartMenu(GLFWwindow* window)
     const bool down = glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS;
     const bool enter = glfwGetKey(window, GLFW_KEY_ENTER) == GLFW_PRESS;
     const bool f11 = glfwGetKey(window, GLFW_KEY_F11) == GLFW_PRESS;
-    const bool esc = glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS;
+    const bool leftKey = glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS;
+    const bool rightKey = glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS;
 
-    if (up && !g_prevUp) g_menuSelection = (g_menuSelection + 2) % 3;
-    if (down && !g_prevDown) g_menuSelection = (g_menuSelection + 1) % 3;
+    if (up && !g_prevUp) g_menuSelection = (g_menuSelection + 3) % 4;
+    if (down && !g_prevDown) g_menuSelection = (g_menuSelection + 1) % 4;
+    if (g_menuSelection == 2)
+    {
+        if (leftKey && !g_prevLeft) { g_musicVolume = std::max(0, g_musicVolume - 5); applyMusicVolume(); saveDisplaySettings(); }
+        if (rightKey && !g_prevRight) { g_musicVolume = std::min(100, g_musicVolume + 5); applyMusicVolume(); saveDisplaySettings(); }
+    }
 
     if (enter && !g_prevEnter)
         activateMenuSelection(window);
@@ -6662,14 +7506,14 @@ static void updateStartMenu(GLFWwindow* window)
     const float my = (float)fbH - (float)cursorY;
 
     const float panelW = std::min(720.0f, fbW * 0.78f);
-    const float panelH = std::min(560.0f, fbH * 0.78f);
+    const float panelH = std::min(620.0f, fbH * 0.84f);
     const float left = fbW * 0.5f - panelW * 0.5f;
     const float bottom = fbH * 0.5f - panelH * 0.5f;
 
     int hovered = -1;
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < 4; ++i)
     {
-        const float y = bottom + panelH - 205.0f - i * 86.0f;
+        const float y = bottom + panelH - 205.0f - i * 70.0f;
         const float bx0 = left + 75.0f;
         const float bx1 = left + panelW - 75.0f;
         const float by0 = y;
@@ -6693,13 +7537,12 @@ static void updateStartMenu(GLFWwindow* window)
     if (f11 && !g_prevF11)
         setFullscreenMode(window, !g_displaySettings.fullscreen);
 
-    if (esc)
-        glfwSetWindowShouldClose(window, GLFW_TRUE);
-
     g_prevUp = up;
     g_prevDown = down;
     g_prevEnter = enter;
     g_prevF11 = f11;
+    g_prevLeft = leftKey;
+    g_prevRight = rightKey;
 }
 
 // ============================================================
@@ -6933,6 +7776,8 @@ int main()
 
     initEnvironmentTextures();
     initHouseModel();
+    initWtcModel();
+    initWeaponModels();
 
     // IMPORTANT:
     // player is deliberately placed in an empty area
@@ -6972,11 +7817,28 @@ int main()
         const bool f11Pressed = glfwGetKey(g_window, GLFW_KEY_F11) == GLFW_PRESS;
         static bool prevF11Gameplay = false;
 
-        if (!g_inStartMenu && escapePressed && !prevEscape)
+        bool enteredPauseThisFrame = false;
+        if (escapePressed && !prevEscape)
         {
-            g_inStartMenu = true;
-            glfwSetInputMode(g_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-            g_firstMouse = true;
+            if (g_pauseMenu && g_inStartMenu)
+            {
+                g_pauseMenu = false;
+                g_inStartMenu = false;
+                g_menuSelection = 0;
+                glfwSetInputMode(g_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                g_firstMouse = true;
+                if (glfwRawMouseMotionSupported())
+                    glfwSetInputMode(g_window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+            }
+            else if (!g_inStartMenu)
+            {
+                g_pauseMenu = true;
+                g_inStartMenu = true;
+                g_menuSelection = 0;
+                glfwSetInputMode(g_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                g_firstMouse = true;
+                enteredPauseThisFrame = true;
+            }
         }
         if (!g_inStartMenu && f11Pressed && !prevF11Gameplay)
             setFullscreenMode(g_window, !g_displaySettings.fullscreen);
@@ -6989,9 +7851,23 @@ int main()
         // ----------------------------------------------------
 
         if (g_inStartMenu)
-            updateStartMenu(g_window);
+        {
+            if (!enteredPauseThisFrame)
+                updateStartMenu(g_window);
+        }
         else
             updateGame(dt);
+
+#ifdef _WIN32
+        // Keep music alive across menu/game transitions. If the MCI device
+        // was closed by another Windows audio event, reopen the same WAV.
+        static double musicRetryAt = 0.0;
+        if (!g_musicPlaying && now >= musicRetryAt)
+        {
+            startGameMusic();
+            musicRetryAt = now + 1.0;
+        }
+#endif
 
         // ----------------------------------------------------
         // VIEWPORT
@@ -7033,26 +7909,37 @@ int main()
             GL_DEPTH_BUFFER_BIT
         );
 
+        glFogi(GL_FOG_MODE, GL_LINEAR);
+
         if (g_world == WORLD_OCEAN)
         {
             const GLfloat fogColor[] = {0.015f,0.12f,0.20f,1.0f};
             glFogfv(GL_FOG_COLOR, fogColor);
-            glFogf(GL_FOG_START, 220.0f);
-            glFogf(GL_FOG_END, 610.0f);
+            glFogf(GL_FOG_START, 180.0f);
+            glFogf(GL_FOG_END, 560.0f);
         }
         else if (g_world == WORLD_WINTER)
         {
             const GLfloat fogColor[] = {0.72f,0.80f,0.88f,1.0f};
             glFogfv(GL_FOG_COLOR, fogColor);
-            glFogf(GL_FOG_START, 240.0f);
-            glFogf(GL_FOG_END, 620.0f);
+            glFogf(GL_FOG_START, 190.0f);
+            glFogf(GL_FOG_END, 580.0f);
         }
         else
         {
-            const GLfloat fogColor[] = {0.025f,0.045f,0.075f,1.0f};
+            // Match the ordinary-world fog to the current sky so distant
+            // terrain fades into the horizon instead of disappearing into a
+            // dark rectangle during daytime.
+            const float fday = terrainDayFactor();
+            const GLfloat fogColor[] = {
+                0.018f + 0.42f*fday,
+                0.030f + 0.62f*fday,
+                0.060f + 0.90f*fday,
+                1.0f
+            };
             glFogfv(GL_FOG_COLOR, fogColor);
-            glFogf(GL_FOG_START, 180.0f);
-            glFogf(GL_FOG_END, 340.0f);
+            glFogf(GL_FOG_START, 260.0f);
+            glFogf(GL_FOG_END, 900.0f);
         }
 
         if (g_inStartMenu)
@@ -7082,7 +7969,7 @@ int main()
             0.05f;
 
         float farPlane =
-            650.0f;
+            10000.0f;
 
         float top =
             nearPlane *
@@ -7154,7 +8041,10 @@ int main()
 
         drawEnemyProjectiles();
         drawExplosions();
+        drawSubmarineDeathEffects();
+        drawTankDeathEffects();
         drawEnemies();
+        drawDeadEnemyEffects();
 
         // ----------------------------------------------------
         // WEAPON
@@ -7207,6 +8097,8 @@ int main()
     destroyImpactFont();
 #endif
     destroyHouseModel();
+    destroyWtcModel();
+    destroyWeaponModels();
     destroyEnvironmentTextures();
 
     glfwTerminate();

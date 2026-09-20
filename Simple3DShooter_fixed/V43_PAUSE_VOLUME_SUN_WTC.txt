@@ -1,0 +1,9 @@
+V43 changes
+
+- ESC pause is now edge-triggered and cannot immediately close the pause menu on the same key press.
+- ESC in pause resumes the exact current game state without resetGame().
+- Music volume control added to both start menu and pause menu (5% steps, Left/Right).
+- Music volume is persisted in settings.cfg and controlled through the Windows MCI waveaudio device.
+- System clock moved to the top-left HUD corner.
+- Main-world sun is a camera-facing billboard at a world-fixed, phase-driven position, so it visibly moves across the sky during the day.
+- Added a smooth raised terrain foundation beneath the two imported WTC complexes to prevent walking under their bases.

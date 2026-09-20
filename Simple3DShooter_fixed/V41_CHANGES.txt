@@ -1,0 +1,13 @@
+V41 CHANGELOG
+
+- Player ammunition is fully replenished on death/respawn.
+- Ocean submarines now have 360 HP; close rocket hits apply at least 90% damage, so three rocket hits are sufficient.
+- Added a large volumetric 3D submarine destruction effect with expanding debris/shockwave chunks.
+- Added a separate world-space ocean sky with a fixed world direction, gradient atmosphere and sun; it is not a camera-locked overlay.
+- Buried the complete tunnel network 13 units below the local terrain. Surface gates remain visible; E teleports into/out of the real underground network.
+- Removed the old surface-to-underground ramp behaviour.
+- Tunnel movement collision now uses the union of the actual tunnel segment contours, including bends/junctions.
+- Tunnel projectile/line-of-sight checks now block rays that leave the corridor or cross the floor/arched ceiling.
+- Tunnel enemies and drones are constrained by the same corridor contour and cannot walk through tunnel walls.
+- Ocean player rockets no longer use the old low ceiling limit; high jetpack shots can travel to their target.
+- Source-level checks performed: balanced braces, duplicate declaration check, asset presence and archive structure.

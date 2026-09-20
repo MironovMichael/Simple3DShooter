@@ -1,0 +1,8 @@
+V42 changes
+- ESC opens a true pause menu; Continue resumes from the exact current position/state.
+- Real system clock in HUD.
+- Automatic reload when magazine reaches zero.
+- Separate large tank destruction animation.
+- Increased camera far plane so the day/night sky dome is actually visible.
+- World-linear distance fog tuned to hide terrain draw-distance edges.
+- Added the supplied wtc.obj as two landmark skyscraper complexes beside the city with solid AABB collision.

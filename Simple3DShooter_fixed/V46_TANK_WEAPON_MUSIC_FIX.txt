@@ -1,0 +1,6 @@
+V46 fixes:
+- Tank raycast hitbox enlarged and tank hits win over nearly coincident cover.
+- Tank damage application made explicit and non-zero.
+- Weapon switching is guaranteed not to change world state.
+- Weapon model draw skips non-finite vertices.
+- Music path resolution is more robust and retries MCI open/play automatically.

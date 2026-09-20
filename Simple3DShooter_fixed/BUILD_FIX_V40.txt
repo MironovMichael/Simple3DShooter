@@ -1,0 +1,11 @@
+V40 BUILD FIX
+
+Fixed the compile error in otherWorldObjectBlocked(): the function now appears
+after the player state variables, so g_py is declared before use.
+
+Warnings fixed:
+- split the OBJ negative-index if statements so -Wmisleading-indentation is gone;
+- removed the unused dissolve-animation variable t;
+- marked intentionally retained legacy/fallback helpers [[maybe_unused]].
+
+The archive keeps the V40 gameplay changes and the house model/music assets.

@@ -1,0 +1,1 @@
+V44: fixed left-key declaration conflict and unused wrapped variable; added OBJ weapon models for pistol, rifle and shotgun from Separate_assets_obj.zip; improved bullet tracers; preserved RPG-7.obj.rar in assets/weapons for the supplied rocket launcher asset.

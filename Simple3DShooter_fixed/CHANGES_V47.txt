@@ -1,0 +1,12 @@
+V47 FIXES
+- Fixed rayAABB loop (3 axes, not 4). This removes out-of-bounds memory access that could corrupt tank hitboxes and physics.
+- Tank shot hit volume enlarged and stabilized.
+- Weapon switching is edge-triggered and cannot perform a world transition.
+- Replaced pistol with supplied revolver model.
+- Replaced rifle with supplied AK-74 model.
+- Replaced shotgun with supplied doppietta model.
+- Kept RPG-7 model and made it larger/more prominent in the FPS view.
+- Replaced unreliable MCI music playback with Windows waveOut PCM playback; volume control now applies to the actual music stream and looping is automatic.
+- Fixed volume percentage overlapping the volume bar.
+- WTC model render distance increased and fog is disabled only while drawing the landmark so it cannot disappear into distance fog.
+- WTC has a visible fallback silhouette if OBJ loading fails.

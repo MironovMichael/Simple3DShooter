@@ -1,0 +1,34 @@
+# Blender 4.1.1 MTL File: 'rovelver1.0.0.blend'
+# www.blender.org
+
+newmtl Cycles_Red_&_Silver_Smart_Material.001
+Ns 360.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+
+newmtl Material.001
+Ns 318.344238
+Ka 0.504587 0.504587 0.504587
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 3
+map_Bump -bm 1.000000 texture_low/1_body_low_NORMAL.004.png
+
+newmtl bullet-low_BM_Custom_Material
+Ns 318.344238
+Ka 0.504587 0.504587 0.504587
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 3
+map_Bump -bm 1.000000 Cylinder/1_bullet-low_NORMAL.png
